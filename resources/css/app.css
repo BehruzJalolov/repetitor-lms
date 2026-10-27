@@ -1,0 +1,112 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+
+    --color-brand-50: #f1f0ff;
+    --color-brand-100: #e5e3ff;
+    --color-brand-200: #cfcbff;
+    --color-brand-300: #b0a8ff;
+    --color-brand-400: #8f80fb;
+    --color-brand-500: #7459f4;
+    --color-brand-600: #6338e8;
+    --color-brand-700: #5429cc;
+    --color-brand-800: #4524a5;
+    --color-brand-900: #2d1a6b;
+
+    --color-accent-400: #ff9f6b;
+    --color-accent-500: #ff7a3d;
+
+    --animate-float: float 6s ease-in-out infinite;
+    --animate-fade-up: fade-up 0.7s ease-out both;
+
+    @keyframes float {
+
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-14px);
+        }
+    }
+
+    @keyframes fade-up {
+        from {
+            opacity: 0;
+            transform: translateY(24px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+    }
+
+    body {
+        @apply bg-slate-50 text-slate-800 antialiased;
+    }
+}
+
+/* Tailwind 4: maxsus klasslar @utility orqali e'lon qilinadi (shunda @apply va variantlar ishlaydi) */
+@utility btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-200 cursor-pointer;
+}
+
+@utility btn-primary {
+    @apply btn bg-gradient-to-r from-brand-600 to-brand-500 text-white shadow-lg shadow-brand-500/30 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-500/40;
+}
+
+@utility btn-outline {
+    @apply btn border border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:text-brand-600;
+}
+
+@utility btn-ghost {
+    @apply btn text-slate-600 hover:bg-brand-50 hover:text-brand-600;
+}
+
+@utility btn-lg {
+    @apply px-7! py-3.5! text-base!;
+}
+
+@utility card {
+    @apply rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-all duration-300;
+}
+
+@utility card-hover {
+    @apply hover:-translate-y-1.5 hover:shadow-xl hover:shadow-brand-500/10 hover:border-brand-200;
+}
+
+@utility input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm placeholder:text-slate-400 transition focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100;
+}
+
+@utility label {
+    @apply mb-1.5 block text-sm font-semibold text-slate-700;
+}
+
+@utility badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+}
+
+@utility section-title {
+    @apply text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl;
+}
+
+@utility gradient-text {
+    @apply bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 bg-clip-text text-transparent;
+}

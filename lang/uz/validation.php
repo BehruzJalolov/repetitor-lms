@@ -1,0 +1,52 @@
+<?php
+
+return [
+    'accepted' => ':attribute qabul qilinishi kerak.',
+    'boolean' => ':attribute maydoni to\'g\'ri/noto\'g\'ri bo\'lishi kerak.',
+    'confirmed' => ':attribute tasdig\'i mos kelmadi.',
+    'email' => ':attribute to\'g\'ri email manzil bo\'lishi kerak.',
+    'exists' => 'Tanlangan :attribute noto\'g\'ri.',
+    'file' => ':attribute fayl bo\'lishi kerak.',
+    'image' => ':attribute rasm bo\'lishi kerak.',
+    'in' => 'Tanlangan :attribute noto\'g\'ri.',
+    'integer' => ':attribute butun son bo\'lishi kerak.',
+    'max' => [
+        'numeric' => ':attribute :max dan oshmasligi kerak.',
+        'file' => ':attribute hajmi :max KB dan oshmasligi kerak.',
+        'string' => ':attribute :max ta belgidan oshmasligi kerak.',
+        'array' => ':attribute :max tadan ortiq element bo\'lmasligi kerak.',
+    ],
+    'mimes' => ':attribute quyidagi formatlardan biri bo\'lishi kerak: :values.',
+    'min' => [
+        'numeric' => ':attribute kamida :min bo\'lishi kerak.',
+        'file' => ':attribute hajmi kamida :min KB bo\'lishi kerak.',
+        'string' => ':attribute kamida :min ta belgidan iborat bo\'lishi kerak.',
+        'array' => ':attribute kamida :min ta element bo\'lishi kerak.',
+    ],
+    'numeric' => ':attribute son bo\'lishi kerak.',
+    'regex' => ':attribute formati noto\'g\'ri.',
+    'required' => ':attribute maydonini to\'ldiring.',
+    'string' => ':attribute matn bo\'lishi kerak.',
+    'unique' => 'Bu :attribute allaqachon band.',
+    'uploaded' => ':attribute yuklanmadi. Fayl hajmi juda katta bo\'lishi mumkin.',
+    'url' => ':attribute to\'g\'ri havola bo\'lishi kerak.',
+
+    'custom' => [],
+
+    'attributes' => [
+        'name' => 'ism',
+        'phone' => 'telefon raqam',
+        'password' => 'parol',
+        'title' => 'nom',
+        'description' => 'tavsif',
+        'price' => 'narx',
+        'thumbnail' => 'rasm',
+        'is_active' => 'faollik',
+        'youtube_url' => 'YouTube havola',
+        'file' => 'fayl',
+        'is_free' => 'bepul belgisi',
+        'receipt' => 'chek rasmi',
+        'duration' => 'muddat',
+        'admin_comment' => 'izoh',
+    ],
+];
