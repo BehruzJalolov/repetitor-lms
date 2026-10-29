@@ -17,15 +17,17 @@
             <img src="{{ $course->thumbnail_url }}" alt="" class="absolute inset-0 h-full w-full object-cover">
         @endif
         <div class="absolute inset-0 bg-slate-900/65"></div>
-        <div class="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-            <nav class="text-sm text-white/70" aria-label="Breadcrumb">
-                <a href="{{ route('courses.index') }}" class="hover:text-white">Kurslar</a> <span class="mx-1">/</span> {{ $course->title }}
+        <div class="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+            <nav class="flex flex-wrap items-center gap-1 text-xs text-white/70 sm:text-sm" aria-label="Breadcrumb">
+                <a href="{{ route('courses.index') }}" class="hover:text-white">Kurslar</a>
+                <span class="mx-1">/</span>
+                <span class="line-clamp-1">{{ $course->title }}</span>
             </nav>
-            <h1 class="mt-3 max-w-3xl text-3xl font-extrabold leading-tight sm:text-4xl lg:text-5xl">{{ $course->title }}</h1>
+            <h1 class="mt-3 max-w-3xl break-words text-2xl font-extrabold leading-tight sm:text-4xl lg:text-5xl">{{ $course->title }}</h1>
             @if ($course->description)
-                <p class="mt-4 max-w-2xl whitespace-pre-line text-lg text-white/85">{{ $course->description }}</p>
+                <p class="mt-3 max-w-2xl whitespace-pre-line text-sm text-white/85 sm:mt-4 sm:text-lg">{{ $course->description }}</p>
             @endif
-            <div class="mt-6 flex flex-wrap gap-5 text-sm font-medium text-white/90">
+            <div class="mt-5 flex flex-wrap gap-3 text-xs font-medium text-white/90 sm:mt-6 sm:gap-5 sm:text-sm">
                 <span>🎬 {{ $course->lessons->count() }} ta dars</span>
                 @if ($firstFree) <span>🎁 Bepul namuna dars bor</span> @endif
                 @if ($course->lessons->whereNotNull('file_path')->count()) <span>📄 Konspektlar</span> @endif
@@ -33,13 +35,13 @@
         </div>
     </section>
 
-    <div class="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-3 lg:px-8">
+    <div class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-3 lg:gap-8 lg:px-8">
         {{-- Darslar --}}
-        <div class="lg:col-span-2">
-            <h2 class="text-2xl font-extrabold text-slate-900">Kurs dasturi</h2>
+        <div class="min-w-0 lg:col-span-2">
+            <h2 class="text-xl font-extrabold text-slate-900 sm:text-2xl">Kurs dasturi</h2>
             <p class="mt-1 text-sm text-slate-500">{{ $course->lessons->count() }} ta dars</p>
 
-            <ul class="mt-6 space-y-3">
+            <ul class="mt-5 space-y-3 sm:mt-6">
                 @forelse ($course->lessons as $lesson)
                     @php
                         $open = $lesson->is_free || $hasAccess;
@@ -50,17 +52,17 @@
                     @endphp
                     <li>
                         <a @if ($href) href="{{ $href }}" @else aria-disabled="true" @endif id="lesson-link-{{ $lesson->id }}"
-                           class="card flex items-center gap-4 p-4 {{ $href ? 'card-hover' : 'cursor-not-allowed opacity-75' }}">
-                            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold
+                           class="card flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4 {{ $href ? 'card-hover' : 'cursor-not-allowed opacity-75' }}">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold sm:h-11 sm:w-11 sm:text-base
                                 {{ $done ? 'bg-emerald-100 text-emerald-600' : ($open ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-400') }}">
                                 {{ $done ? '✓' : ($open ? '▶' : '🔒') }}
                             </span>
                             <div class="min-w-0 flex-1">
-                                <p class="truncate font-semibold text-slate-900">{{ $loop->iteration }}. {{ $lesson->title }}</p>
-                                @if ($lesson->file_path) <p class="text-xs text-slate-500">📄 Konspekt / test biriktirilgan</p> @endif
+                                <p class="line-clamp-2 text-sm font-semibold text-slate-900 sm:truncate sm:text-base">{{ $loop->iteration }}. {{ $lesson->title }}</p>
+                                @if ($lesson->file_path) <p class="mt-0.5 text-xs text-slate-500">📄 Konspekt / test biriktirilgan</p> @endif
                             </div>
                             @if ($lesson->is_free && ! $hasAccess)
-                                <span class="badge bg-emerald-100 text-emerald-700">Bepul</span>
+                                <span class="badge shrink-0 bg-emerald-100 text-emerald-700">Bepul</span>
                             @endif
                         </a>
                     </li>
@@ -71,8 +73,8 @@
         </div>
 
         {{-- Sidebar --}}
-        <aside>
-            <div class="card sticky top-24 p-6 shadow-xl shadow-brand-500/10">
+        <aside class="min-w-0">
+            <div class="card sticky top-24 p-5 shadow-xl shadow-brand-500/10 sm:p-6">
                 @if ($hasAccess)
                     <div class="rounded-2xl bg-emerald-50 p-4 text-emerald-800">
                         <p class="font-bold">✅ Kurs siz uchun ochiq</p>
@@ -81,17 +83,17 @@
                         @endif
                     </div>
                     @if ($course->lessons->isNotEmpty())
-                        <a href="{{ route('lessons.show', [$course, $course->lessons->first()]) }}" class="btn-primary btn-lg mt-5 w-full">▶ O'qishni boshlash</a>
+                        <a href="{{ route('lessons.show', [$course, $course->lessons->first()]) }}" class="btn-primary mt-5 w-full py-3 text-sm sm:py-3.5 sm:text-base">▶ O'qishni boshlash</a>
                         @if (count($completedIds) >= $course->lessons->count())
-                            <a href="{{ route('courses.certificate', $course) }}" class="btn-outline mt-3 w-full">🏅 Sertifikatni olish</a>
+                            <a href="{{ route('courses.certificate', $course) }}" class="btn-outline mt-3 w-full text-sm">🏅 Sertifikatni olish</a>
                         @endif
                     @endif
                 @else
                     <p class="text-sm font-medium text-slate-500">Kurs narxi</p>
                     @if ($course->price > 0)
-                        <p class="mt-1 text-4xl font-extrabold text-slate-900">{{ number_format($course->price, 0, '', ' ') }} <span class="text-lg font-semibold text-slate-500">so'm</span></p>
+                        <p class="mt-1 text-3xl font-extrabold text-slate-900 sm:text-4xl">{{ number_format($course->price, 0, '', ' ') }} <span class="text-base font-semibold text-slate-500 sm:text-lg">so'm</span></p>
                     @else
-                        <p class="mt-1 text-4xl font-extrabold text-emerald-600">Bepul</p>
+                        <p class="mt-1 text-3xl font-extrabold text-emerald-600 sm:text-4xl">Bepul</p>
                     @endif
 
                     @if ($status === 'pending')
@@ -114,17 +116,17 @@
 
                     @if ($canPay)
                         @auth
-                            <button type="button" id="buy-course" @click="pay = true" class="btn-primary btn-lg mt-5 w-full">
+                            <button type="button" id="buy-course" @click="pay = true" class="btn-primary mt-5 w-full py-3 text-sm sm:py-3.5 sm:text-base">
                                 {{ $status ? 'Chekni qayta yuborish' : 'Kursni ochish' }}
                             </button>
                         @else
-                            <a href="{{ route('register') }}" id="buy-course" class="btn-primary btn-lg mt-5 w-full">Kursni ochish</a>
+                            <a href="{{ route('register') }}" id="buy-course" class="btn-primary mt-5 w-full py-3 text-sm sm:py-3.5 sm:text-base">Kursni ochish</a>
                             <p class="mt-2 text-center text-xs text-slate-400">Avval ro'yxatdan o'ting yoki <a href="{{ route('login') }}" class="text-brand-600 hover:underline">kiring</a></p>
                         @endauth
                     @endif
 
                     @if ($firstFree)
-                        <a href="{{ auth()->check() ? route('lessons.show', [$course, $firstFree]) : route('register') }}" class="btn-outline mt-3 w-full">▶ Bepul darsni ko'rish</a>
+                        <a href="{{ auth()->check() ? route('lessons.show', [$course, $firstFree]) : route('register') }}" class="btn-outline mt-3 w-full py-2.5 text-sm">▶ Bepul darsni ko'rish</a>
                     @endif
                 @endif
 

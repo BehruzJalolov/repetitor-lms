@@ -9,14 +9,15 @@
 @endphp
 
 @section('content')
-<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-    <nav class="mb-5 text-sm text-slate-500" aria-label="Breadcrumb">
-        <a href="{{ route('courses.index') }}" class="hover:text-brand-600">Kurslar</a> /
-        <a href="{{ route('courses.show', $course) }}" class="hover:text-brand-600">{{ $course->title }}</a>
+<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <nav class="mb-4 flex flex-wrap items-center gap-1 text-xs text-slate-500 sm:mb-5 sm:text-sm" aria-label="Breadcrumb">
+        <a href="{{ route('courses.index') }}" class="hover:text-brand-600">Kurslar</a>
+        <span>/</span>
+        <a href="{{ route('courses.show', $course) }}" class="line-clamp-1 hover:text-brand-600">{{ $course->title }}</a>
     </nav>
 
-    <div class="grid gap-8 lg:grid-cols-3">
-        <div class="lg:col-span-2">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+        <div class="min-w-0 lg:col-span-2">
             {{-- VIDEO PLAYER + DINAMIK ANTI-PIRACY WATERMARK --}}
             <div x-data="{
                     pos: 0,
@@ -57,7 +58,7 @@
 
                 {{-- Dinamik suzib yuruvchi himoya belgisi (Ekran yozib olishga qarshi) --}}
                 <div :class="positions[pos]"
-                     class="pointer-events-none absolute z-20 rounded-lg bg-slate-900/35 px-2.5 py-1 font-mono text-[10px] font-bold text-white/55 backdrop-blur-[1px] transition-all duration-700 sm:text-xs">
+                     class="pointer-events-none absolute z-20 max-w-[85%] truncate rounded-lg bg-slate-900/35 px-2.5 py-1 font-mono text-[10px] font-bold text-white/55 backdrop-blur-[1px] transition-all duration-700 sm:text-xs">
                     🔒 {{ auth()->user()->name }} • {{ auth()->user()->phone }}
                 </div>
             </div>
@@ -70,9 +71,9 @@
                 </div>
             @endif
 
-            <div class="mt-5 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900 sm:text-3xl">{{ $number }}. {{ $lesson->title }}</h1>
+            <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
+                <div class="min-w-0 flex-1">
+                    <h1 class="break-words text-xl font-extrabold text-slate-900 sm:text-3xl">{{ $number }}. {{ $lesson->title }}</h1>
                     @if ($lesson->is_free && ! $hasAccess)
                         <p class="mt-1 text-sm font-semibold text-emerald-600">🎁 Bepul namuna dars</p>
                     @endif
@@ -81,12 +82,12 @@
                     <form method="POST" action="{{ route('lessons.complete', [$course, $lesson]) }}" class="w-full sm:w-auto">
                         @csrf
                         <button type="submit" id="mark-complete"
-                                class="btn w-full sm:w-auto {{ $isCompleted ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600' : 'border border-slate-200 bg-white text-slate-700 hover:border-emerald-400' }}">
+                                class="btn w-full text-xs sm:w-auto sm:text-sm {{ $isCompleted ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600' : 'border border-slate-200 bg-white text-slate-700 hover:border-emerald-400' }}">
                             {{ $isCompleted ? "✓ Ko'rib bo'lindi" : "Ko'rib bo'ldim deb belgilash" }}
                         </button>
                     </form>
                 @else
-                    <span class="badge {{ $quizPassed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800' }} px-3.5 py-2 text-xs">
+                    <span class="badge whitespace-normal text-left leading-snug {{ $quizPassed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800' }} px-3.5 py-2 text-xs">
                         {{ $quizPassed ? "✓ Test topshirildi ({$quizScore}%)" : ($quizScore !== null ? "⏳ Test: {$quizScore}% (min. 70%)" : "📝 Darsni tugatish uchun pastdagi testni ishlang") }}
                     </span>
                 @endif
@@ -150,21 +151,21 @@
             @endif
 
             @if (! $hasAccess)
-                <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-brand-700 to-brand-500 p-6 text-white">
+                <div class="mt-6 flex flex-col gap-4 rounded-2xl bg-gradient-to-r from-brand-700 to-brand-500 p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div>
-                        <p class="text-lg font-bold">Dars yoqdimi? 🚀</p>
-                        <p class="text-sm text-brand-100">Qolgan {{ $total - 1 }} ta darsni ochish uchun kursni sotib oling.</p>
+                        <p class="text-base font-bold sm:text-lg">Dars yoqdimi? 🚀</p>
+                        <p class="text-xs text-brand-100 sm:text-sm">Qolgan {{ $total - 1 }} ta darsni ochish uchun kursni sotib oling.</p>
                     </div>
-                    <a href="{{ route('courses.show', $course) }}" class="btn bg-white text-brand-700 hover:-translate-y-0.5">Kursni ochish</a>
+                    <a href="{{ route('courses.show', $course) }}" class="btn w-full shrink-0 bg-white text-brand-700 hover:-translate-y-0.5 sm:w-auto">Kursni ochish</a>
                 </div>
             @endif
 
-            <div class="mt-6 flex justify-between gap-3">
+            <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 @if ($prev && ($prev->is_free || $hasAccess))
-                    <a href="{{ route('lessons.show', [$course, $prev]) }}" class="btn-outline">← Oldingi dars</a>
-                @else <span></span> @endif
+                    <a href="{{ route('lessons.show', [$course, $prev]) }}" class="btn-outline w-full sm:w-auto">← Oldingi dars</a>
+                @else <span class="hidden sm:block"></span> @endif
                 @if ($next && ($next->is_free || $hasAccess))
-                    <a href="{{ route('lessons.show', [$course, $next]) }}" class="btn-primary">Keyingi dars →</a>
+                    <a href="{{ route('lessons.show', [$course, $next]) }}" class="btn-primary w-full sm:w-auto">Keyingi dars →</a>
                 @endif
             </div>
 
@@ -182,7 +183,7 @@
         </div>
 
         {{-- Darslar ro'yxati --}}
-        <aside>
+        <aside class="min-w-0">
             <div class="card sticky top-24 overflow-hidden">
                 <div class="border-b border-slate-100 p-5">
                     <h2 class="font-bold text-slate-900">Kurs darslari</h2>

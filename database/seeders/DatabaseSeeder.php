@@ -18,11 +18,17 @@ class DatabaseSeeder extends Seeder
     {
         // Admin (repetitor) hisobi. Ma'lumotlar config/admin.php (.env) dan olinadi.
         $phone = Phone::normalize(config('admin.phone')) ?? config('admin.phone');
+        $email = config('admin.email');
 
-        $user = User::firstOrNew(['phone' => $phone]);
+        $user = User::where('role', 'admin')
+            ->orWhere('phone', $phone)
+            ->when($email, fn ($q) => $q->orWhere('email', $email))
+            ->first() ?? new User;
+
         $user->forceFill([
             'name' => config('admin.name'),
-            'email' => config('admin.email'),
+            'phone' => $phone,
+            'email' => $email,
             'role' => 'admin',
             'password' => config('admin.password'),
         ])->save();

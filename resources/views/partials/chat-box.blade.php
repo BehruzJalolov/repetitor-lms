@@ -171,10 +171,10 @@
                            maxlength="1000"
                            value="{{ old('message') }}"
                            placeholder="Dars bo'yicha savol yoki fikringizni yozing..."
-                           class="input !py-2.5"
+                           class="input !py-2.5 text-sm"
                            required>
                 </div>
-                <button type="submit" id="send-chat-message" class="btn-primary shrink-0 !px-5 !py-2.5">
+                <button type="submit" id="send-chat-message" class="btn-primary shrink-0 !px-3.5 !py-2.5 text-xs sm:!px-5 sm:text-sm">
                     Yuborish ➤
                 </button>
             </form>
