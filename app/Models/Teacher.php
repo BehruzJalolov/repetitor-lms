@@ -34,9 +34,43 @@ class Teacher extends Model
         ];
     }
 
-    public function getPhotoUrlAttribute(): ?string
+    public function getPhotoUrlAttribute(): string
     {
-        return $this->photo ? Storage::disk('public')->url($this->photo) : null;
+        if (is_string($this->photo) && $this->photo !== '') {
+            if (
+                str_starts_with($this->photo, 'http://')
+                || str_starts_with($this->photo, 'https://')
+                || str_starts_with($this->photo, 'data:image/')
+                || str_starts_with($this->photo, '/')
+            ) {
+                return $this->photo;
+            }
+
+            if (Storage::disk('public')->exists($this->photo)) {
+                return Storage::disk('public')->url($this->photo);
+            }
+        }
+
+        $bySlug = [
+            'sardor-karimov' => 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?auto=format&fit=crop&w=800&q=80',
+            'nilufar-rustamova' => 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80',
+            'ulugbek-rahimov' => 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80',
+        ];
+
+        if ($this->slug && isset($bySlug[$this->slug])) {
+            return $bySlug[$this->slug];
+        }
+
+        $defaults = [
+            'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80',
+        ];
+
+        return $defaults[($this->id ?? 0) % count($defaults)];
     }
 
     public function getGradientAttribute(): string

@@ -28,7 +28,7 @@
             </dl>
         </div>
 
-        {{-- O'NG TOMON: 3 TA USTOZ RASMI AYLANIB TURADIGAN ZAMONAVIY MINIMALIST VITRINA --}}
+        {{-- O'NG TOMON: 3 TA USTOZNING FAQAT RASMI AYLANIB TURADIGAN MINIMALIST VITRINA --}}
         <div class="relative">
             @if ($teachers->isNotEmpty())
                 @php $showcaseTeachers = $teachers->take(3)->values(); @endphp
@@ -43,7 +43,7 @@
                                 if (!this.paused && this.total > 1) {
                                     this.next();
                                 }
-                            }, 3800);
+                            }, 3500);
                         },
                         next() {
                             this.active = (this.active + 1) % this.total;
@@ -54,17 +54,17 @@
                         goTo(index) {
                             this.active = index;
                         },
-                        cardPositionClass(index) {
+                        cardStyle(index) {
                             if (index === this.active) {
-                                return 'z-30 translate-x-0 scale-100 rotate-0 opacity-100 shadow-2xl ring-1 ring-white/30';
+                                return 'z-index: 30; transform: translateX(0px) scale(1) rotate(0deg); opacity: 1;';
                             }
                             if (this.total > 1 && index === (this.active + 1) % this.total) {
-                                return 'z-20 translate-x-16 sm:translate-x-24 scale-[0.85] rotate-6 opacity-55 hover:opacity-80 ring-1 ring-white/15';
+                                return 'z-index: 20; transform: translateX(88px) scale(0.82) rotate(6deg); opacity: 0.55;';
                             }
                             if (this.total > 2 && index === (this.active - 1 + this.total) % this.total) {
-                                return 'z-20 -translate-x-16 sm:-translate-x-24 scale-[0.85] -rotate-6 opacity-55 hover:opacity-80 ring-1 ring-white/15';
+                                return 'z-index: 20; transform: translateX(-88px) scale(0.82) rotate(-6deg); opacity: 0.55;';
                             }
-                            return 'z-10 scale-75 opacity-0 pointer-events-none';
+                            return 'z-index: 10; transform: scale(0.7); opacity: 0; pointer-events: none;';
                         }
                      }"
                      x-init="start()"
@@ -74,60 +74,42 @@
                      @touchend.passive="const diff = $event.changedTouches[0].screenX - touchStartX; if (Math.abs(diff) > 40) { diff < 0 ? next() : prev(); } paused = false"
                      class="relative mx-auto flex flex-col items-center justify-center select-none">
 
-                    {{-- Yumshoq fon nuri --}}
-                    <div class="pointer-events-none absolute inset-0 m-auto h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
-
-                    {{-- 3 ta ustoz rasmi aylanadigan sahna --}}
-                    <div class="relative flex h-[320px] w-full max-w-sm items-center justify-center sm:h-[360px] sm:max-w-md">
+                    {{-- 3 ta ustozning faqat rasmi aylanadigan sahna --}}
+                    <div class="relative flex w-full items-center justify-center" style="height: 310px; max-width: 380px;">
                         @foreach ($showcaseTeachers as $index => $teacher)
                             @php $topResult = $teacher->results->first(); @endphp
                             <a href="{{ route('teachers.show', $teacher) }}"
-                               :class="cardPositionClass({{ $index }})"
-                               class="group absolute aspect-[3/4] w-52 overflow-hidden rounded-3xl bg-white/10 backdrop-blur-md transition-all duration-700 ease-out sm:w-60"
+                               :style="cardStyle({{ $index }})"
+                               style="width: 200px; height: 268px; transition: all 0.7s cubic-bezier(0.22, 1, 0.36, 1);"
+                               class="group absolute overflow-hidden rounded-3xl bg-white/10 shadow-2xl ring-1 ring-white/25 backdrop-blur-md hover:ring-white/60"
                                title="{{ $teacher->name }} — {{ $teacher->subject }}">
 
-                                {{-- Ustoz rasmi --}}
-                                <div class="h-full w-full overflow-hidden" style="background: {{ $teacher->gradient }}">
-                                    @if ($teacher->photo_url)
-                                        <img src="{{ $teacher->photo_url }}"
-                                             alt="{{ $teacher->name }}"
-                                             class="h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-105">
-                                    @else
-                                        <div class="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-white/15 to-transparent p-6 text-center">
-                                            <span class="flex h-20 w-20 items-center justify-center rounded-full bg-white/15 text-4xl font-extrabold text-white ring-1 ring-white/30 backdrop-blur-sm">
-                                                {{ mb_strtoupper(mb_substr($teacher->name, 0, 1)) }}
-                                            </span>
-                                        </div>
+                                <img src="{{ $teacher->photo_url }}"
+                                     alt="{{ $teacher->name }}"
+                                     class="h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-105">
+
+                                {{-- Faqat sichqoncha ustiga borganda ko'rinadigan nafis yozuv --}}
+                                <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent p-3.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                                    <p class="truncate text-center text-xs font-semibold text-white">{{ $teacher->name }}</p>
+                                </div>
+
+                                <span class="sr-only">
+                                    {{ $teacher->name }} — {{ $teacher->subject }}
+                                    @if ($topResult)
+                                        {{ $topResult->student_name }} — {{ $topResult->score }}
                                     @endif
-                                </div>
-
-                                {{-- Pastki qismdagi nafis va ko'zga tashlanmaydigan shaffof qatlam --}}
-                                <div class="inset-x-0 bottom-0 absolute bg-gradient-to-t from-slate-950/85 via-slate-950/35 to-transparent p-4 pt-12 transition-opacity duration-300">
-                                    <span class="inline-block rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/90 ring-1 ring-white/20 backdrop-blur-md">
-                                        {{ $teacher->subject }}
-                                    </span>
-                                    <h2 class="mt-1 truncate text-sm font-bold text-white/95 sm:text-base">
-                                        {{ $teacher->name }}
-                                    </h2>
-                                    <span class="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-brand-200/80 opacity-80 transition-all group-hover:translate-x-0.5 group-hover:text-white group-hover:opacity-100">
-                                        Ma'lumotni ko'rish →
-                                    </span>
-                                </div>
-
-                                @if ($topResult)
-                                    <span class="sr-only">{{ $topResult->student_name }} — {{ $topResult->score }}</span>
-                                @endif
+                                </span>
                             </a>
                         @endforeach
                     </div>
 
-                    {{-- Nafis nuqtali indikatorlar --}}
+                    {{-- Kichik, ko'zga tashlanmaydigan nuqtali indikatorlar --}}
                     @if ($showcaseTeachers->count() > 1)
-                        <div class="mt-3 flex items-center justify-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15 backdrop-blur-md">
+                        <div class="mt-2 flex items-center justify-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15 backdrop-blur-md">
                             @foreach ($showcaseTeachers as $index => $teacher)
                                 <button type="button"
                                         @click="goTo({{ $index }})"
-                                        :class="active === {{ $index }} ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'"
+                                        :class="active === {{ $index }} ? 'w-5 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'"
                                         class="h-1.5 rounded-full transition-all duration-500"
                                         aria-label="{{ $teacher->name }}">
                                 </button>
