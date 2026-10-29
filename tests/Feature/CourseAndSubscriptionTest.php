@@ -13,6 +13,8 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -865,5 +867,52 @@ class CourseAndSubscriptionTest extends TestCase
             ->assertSee('@RepetiXBot')
             ->assertSee('@ITblockbehruz')
             ->assertDontSee('pochtasiga 6 xonali tasdiqlash kodi yuborildi');
+    }
+
+    public function test_telegram_polling_does_not_trigger_429_rate_limit_on_registration_code_verification(): void
+    {
+        Http::fake([
+            'api.telegram.org/*' => Http::response(['ok' => true, 'result' => []]),
+        ]);
+
+        // 1. User submits registration form (1st POST)
+        $this->post(route('register.store'), [
+            'name' => 'Sardorbek Aliyev',
+            'phone' => '+998 90 700 80 90',
+            'email' => 'sardorbek@example.com',
+            'password' => 'secret1234',
+            'password_confirmation' => 'secret1234',
+        ])->assertRedirect(route('register.verify'));
+
+        $regToken = session('pending_registration.telegram_token');
+        $this->assertNotEmpty($regToken);
+
+        // 2. Browser polls GET /royxatdan-otish/telegram-holat 10 times (every 2.5s for 25s) while user is in Telegram
+        for ($i = 0; $i < 10; $i++) {
+            $this->getJson(route('register.telegram.poll'))->assertOk();
+        }
+
+        // 3. Telegram bot verifies channel subscription and issues 6-digit code
+        $otpCode = '739201';
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['phone' => 'reg:sardorbek@example.com'],
+            ['token' => Hash::make($otpCode), 'attempts' => 0, 'created_at' => now()]
+        );
+        Cache::put('tg_verified:'.$regToken, [
+            'chat_id' => '888999000',
+            'code' => $otpCode,
+            'verified_at' => now()->toIso8601String(),
+        ], now()->addMinutes(45));
+
+        // 4. User submits the 6-digit code -> must NOT get 429 Too Many Requests!
+        $this->post(route('register.verify.store'), [
+            'code' => $otpCode,
+        ])->assertRedirect(route('courses.index'));
+
+        $this->assertAuthenticated();
+        $this->assertDatabaseHas('users', [
+            'email' => 'sardorbek@example.com',
+            'telegram_chat_id' => '888999000',
+        ]);
     }
 }

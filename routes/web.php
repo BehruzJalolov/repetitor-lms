@@ -31,20 +31,20 @@ Route::get('/kurslar', [CourseController::class, 'index'])->name('courses.index'
 Route::get('/kurslar/{course:slug}', [CourseController::class, 'show'])->name('courses.show');
 Route::get('/ustozlar', [TeacherController::class, 'index'])->name('teachers.index');
 Route::get('/ustozlar/{teacher:slug}', [TeacherController::class, 'show'])->name('teachers.show');
-Route::post('/murojaat', [LeadController::class, 'store'])->middleware('throttle:5,1')->name('leads.store');
+Route::post('/murojaat', [LeadController::class, 'store'])->middleware('throttle:5,1,leads_store')->name('leads.store');
 
 // O'quvchi (tizimga kirgan foydalanuvchi)
 Route::middleware('auth')->group(function () {
     Route::get('/mening-kurslarim', MyCoursesController::class)->name('my-courses');
     Route::get('/profil', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::put('/profil', [ProfileController::class, 'update'])->middleware('throttle:5,1')->name('profile.update');
-    Route::post('/profil/email-tasdiqlash', [ProfileController::class, 'verifyEmail'])->middleware('throttle:5,1')->name('profile.email.verify');
-    Route::post('/profil/parol-kodi', [ProfileController::class, 'sendPasswordCode'])->middleware('throttle:3,1')->name('profile.password.code');
-    Route::put('/profil/parolni-yangilash', [ProfileController::class, 'updatePassword'])->middleware('throttle:5,1')->name('profile.password.update');
+    Route::put('/profil', [ProfileController::class, 'update'])->middleware('throttle:5,1,profile_update')->name('profile.update');
+    Route::post('/profil/email-tasdiqlash', [ProfileController::class, 'verifyEmail'])->middleware('throttle:5,1,profile_email_verify')->name('profile.email.verify');
+    Route::post('/profil/parol-kodi', [ProfileController::class, 'sendPasswordCode'])->middleware('throttle:3,1,profile_pwd_code')->name('profile.password.code');
+    Route::put('/profil/parolni-yangilash', [ProfileController::class, 'updatePassword'])->middleware('throttle:5,1,profile_pwd_update')->name('profile.password.update');
 
     Route::get('/kurslar/{course:slug}/darslar/{lesson}', [LessonController::class, 'show'])->name('lessons.show');
-    Route::post('/kurslar/{course:slug}/darslar/{lesson}/tugatish', [LessonController::class, 'complete'])->middleware('throttle:20,1')->name('lessons.complete');
-    Route::post('/kurslar/{course:slug}/darslar/{lesson}/test', [LessonController::class, 'submitQuiz'])->middleware('throttle:15,1')->name('lessons.quiz');
+    Route::post('/kurslar/{course:slug}/darslar/{lesson}/tugatish', [LessonController::class, 'complete'])->middleware('throttle:20,1,lesson_complete')->name('lessons.complete');
+    Route::post('/kurslar/{course:slug}/darslar/{lesson}/test', [LessonController::class, 'submitQuiz'])->middleware('throttle:15,1,lesson_quiz')->name('lessons.quiz');
     Route::get('/kurslar/{course:slug}/darslar/{lesson}/video', [LessonController::class, 'video'])->name('lessons.video');
     Route::get('/kurslar/{course:slug}/darslar/{lesson}/fayl', [LessonController::class, 'file'])->name('lessons.file');
     Route::get('/kurslar/{course:slug}/sertifikat', [CertificateController::class, 'show'])->name('courses.certificate');
@@ -55,14 +55,14 @@ Route::middleware('auth')->group(function () {
 
     // O'quvchilar va Ustoz muloqot chati
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
-    Route::get('/chat/xabarlar', [ChatController::class, 'messages'])->middleware('throttle:60,1')->name('chat.messages');
-    Route::post('/chat', [ChatController::class, 'store'])->middleware('throttle:20,1')->name('chat.store');
-    Route::delete('/chat/{chatMessage}', [ChatController::class, 'destroy'])->middleware('throttle:30,1')->name('chat.destroy');
-    Route::post('/chat/{chatMessage}/pin', [ChatController::class, 'togglePin'])->middleware('throttle:30,1')->name('chat.pin');
-    Route::post('/chat/foydalanuvchi/{user}/bloklash', [ChatController::class, 'toggleBan'])->middleware('throttle:30,1')->name('chat.ban');
+    Route::get('/chat/xabarlar', [ChatController::class, 'messages'])->middleware('throttle:60,1,chat_messages')->name('chat.messages');
+    Route::post('/chat', [ChatController::class, 'store'])->middleware('throttle:20,1,chat_store')->name('chat.store');
+    Route::delete('/chat/{chatMessage}', [ChatController::class, 'destroy'])->middleware('throttle:30,1,chat_destroy')->name('chat.destroy');
+    Route::post('/chat/{chatMessage}/pin', [ChatController::class, 'togglePin'])->middleware('throttle:30,1,chat_pin')->name('chat.pin');
+    Route::post('/chat/foydalanuvchi/{user}/bloklash', [ChatController::class, 'toggleBan'])->middleware('throttle:30,1,chat_ban')->name('chat.ban');
 
     Route::post('/kurslar/{course:slug}/tolov', [SubscriptionController::class, 'store'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,subscriptions_store')
         ->name('subscriptions.store');
 });
 
@@ -71,18 +71,18 @@ Route::middleware('guest')->group(function () {
     Route::get('/kirish', [LoginController::class, 'create'])->name('login');
     Route::post('/kirish', [LoginController::class, 'store'])->name('login.store');
     Route::get('/royxatdan-otish', [RegisterController::class, 'create'])->name('register');
-    Route::post('/royxatdan-otish', [RegisterController::class, 'store'])->middleware('throttle:5,1')->name('register.store');
+    Route::post('/royxatdan-otish', [RegisterController::class, 'store'])->middleware('throttle:5,1,register_store')->name('register.store');
     Route::get('/royxatdan-otish/tasdiqlash', [RegisterController::class, 'showVerifyForm'])->name('register.verify');
-    Route::post('/royxatdan-otish/tasdiqlash', [RegisterController::class, 'verify'])->middleware('throttle:5,1')->name('register.verify.store');
-    Route::get('/royxatdan-otish/telegram-holat', [RegisterController::class, 'pollTelegramStatus'])->middleware('throttle:60,1')->name('register.telegram.poll');
-    Route::post('/royxatdan-otish/telegram-tekshirish', [RegisterController::class, 'checkTelegram'])->middleware('throttle:10,1')->name('register.telegram.check');
-    Route::post('/royxatdan-otish/qayta-yuborish', [RegisterController::class, 'resend'])->middleware('throttle:3,1')->name('register.resend');
+    Route::post('/royxatdan-otish/tasdiqlash', [RegisterController::class, 'verify'])->middleware('throttle:5,1,register_verify')->name('register.verify.store');
+    Route::get('/royxatdan-otish/telegram-holat', [RegisterController::class, 'pollTelegramStatus'])->middleware('throttle:60,1,register_poll')->name('register.telegram.poll');
+    Route::post('/royxatdan-otish/telegram-tekshirish', [RegisterController::class, 'checkTelegram'])->middleware('throttle:10,1,register_check')->name('register.telegram.check');
+    Route::post('/royxatdan-otish/qayta-yuborish', [RegisterController::class, 'resend'])->middleware('throttle:3,1,register_resend')->name('register.resend');
 
     // Parolni tiklash (SMS orqali)
     Route::get('/parolni-tiklash', [PasswordResetController::class, 'showRequestForm'])->name('password.request');
-    Route::post('/parolni-tiklash', [PasswordResetController::class, 'sendResetCode'])->middleware('throttle:3,1')->name('password.phone');
+    Route::post('/parolni-tiklash', [PasswordResetController::class, 'sendResetCode'])->middleware('throttle:3,1,password_phone')->name('password.phone');
     Route::get('/parolni-tiklash/tasdiqlash', [PasswordResetController::class, 'showResetForm'])->name('password.reset');
-    Route::post('/parolni-tiklash/tasdiqlash', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:5,1')->name('password.update');
+    Route::post('/parolni-tiklash/tasdiqlash', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:5,1,password_update')->name('password.update');
 });
 
 Route::post('/chiqish', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
