@@ -28,37 +28,43 @@
             </dl>
         </div>
 
-        {{-- O'NG TOMON: 10 SONIYADA AYLANUVCHI USTOZLAR KARUSELI --}}
+        {{-- O'NG TOMON: 3 TA USTOZ RASMI AYLANIB TURADIGAN ZAMONAVIY MINIMALIST VITRINA --}}
         <div class="relative">
             @if ($teachers->isNotEmpty())
+                @php $showcaseTeachers = $teachers->take(3)->values(); @endphp
                 <div x-data="{
                         active: 0,
-                        total: {{ $teachers->count() }},
+                        total: {{ $showcaseTeachers->count() }},
                         paused: false,
-                        progress: 0,
                         touchStartX: 0,
                         timer: null,
                         start() {
                             this.timer = setInterval(() => {
                                 if (!this.paused && this.total > 1) {
-                                    this.progress += 1;
-                                    if (this.progress >= 100) {
-                                        this.next();
-                                    }
+                                    this.next();
                                 }
-                            }, 100);
+                            }, 3800);
                         },
                         next() {
                             this.active = (this.active + 1) % this.total;
-                            this.progress = 0;
                         },
                         prev() {
                             this.active = (this.active - 1 + this.total) % this.total;
-                            this.progress = 0;
                         },
                         goTo(index) {
                             this.active = index;
-                            this.progress = 0;
+                        },
+                        cardPositionClass(index) {
+                            if (index === this.active) {
+                                return 'z-30 translate-x-0 scale-100 rotate-0 opacity-100 shadow-2xl ring-1 ring-white/30';
+                            }
+                            if (this.total > 1 && index === (this.active + 1) % this.total) {
+                                return 'z-20 translate-x-16 sm:translate-x-24 scale-[0.85] rotate-6 opacity-55 hover:opacity-80 ring-1 ring-white/15';
+                            }
+                            if (this.total > 2 && index === (this.active - 1 + this.total) % this.total) {
+                                return 'z-20 -translate-x-16 sm:-translate-x-24 scale-[0.85] -rotate-6 opacity-55 hover:opacity-80 ring-1 ring-white/15';
+                            }
+                            return 'z-10 scale-75 opacity-0 pointer-events-none';
                         }
                      }"
                      x-init="start()"
@@ -66,107 +72,64 @@
                      @mouseleave="paused = false"
                      @touchstart.passive="touchStartX = $event.changedTouches[0].screenX; paused = true"
                      @touchend.passive="const diff = $event.changedTouches[0].screenX - touchStartX; if (Math.abs(diff) > 40) { diff < 0 ? next() : prev(); } paused = false"
-                     class="relative mx-auto w-full max-w-md lg:max-w-lg">
+                     class="relative mx-auto flex flex-col items-center justify-center select-none">
 
-                    <div class="relative min-h-[410px] sm:min-h-[430px]">
-                        @foreach ($teachers as $index => $teacher)
+                    {{-- Yumshoq fon nuri --}}
+                    <div class="pointer-events-none absolute inset-0 m-auto h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
+
+                    {{-- 3 ta ustoz rasmi aylanadigan sahna --}}
+                    <div class="relative flex h-[320px] w-full max-w-sm items-center justify-center sm:h-[360px] sm:max-w-md">
+                        @foreach ($showcaseTeachers as $index => $teacher)
                             @php $topResult = $teacher->results->first(); @endphp
-                            <div x-show="active === {{ $index }}"
-                                 x-cloak
-                                 x-transition:enter="transition ease-out duration-500"
-                                 x-transition:enter-start="opacity-0 translate-y-10 scale-95"
-                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave="transition ease-in duration-300 absolute inset-0"
-                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave-end="opacity-0 -translate-y-8 scale-95"
-                                 class="rounded-3xl bg-white p-5 text-slate-800 shadow-2xl ring-1 ring-white/20 sm:p-6">
+                            <a href="{{ route('teachers.show', $teacher) }}"
+                               :class="cardPositionClass({{ $index }})"
+                               class="group absolute aspect-[3/4] w-52 overflow-hidden rounded-3xl bg-white/10 backdrop-blur-md transition-all duration-700 ease-out sm:w-60"
+                               title="{{ $teacher->name }} — {{ $teacher->subject }}">
 
-                                {{-- 10 soniyalik taymer chizig'i --}}
-                                <div class="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                                    <div class="h-full rounded-full bg-gradient-to-r from-brand-600 to-accent-500 transition-all duration-100"
-                                         :style="`width: ${active === {{ $index }} ? progress : 0}%`"></div>
-                                </div>
-
-                                <div class="flex items-center gap-3.5 sm:gap-4">
-                                    <div class="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl shadow-lg ring-4 ring-brand-50 sm:h-20 sm:w-20" style="background: {{ $teacher->gradient }}">
-                                        @if ($teacher->photo_url)
-                                            <img src="{{ $teacher->photo_url }}" alt="{{ $teacher->name }}" class="h-full w-full object-cover">
-                                        @else
-                                            <span class="flex h-full w-full items-center justify-center text-2xl font-extrabold text-white sm:text-3xl">
+                                {{-- Ustoz rasmi --}}
+                                <div class="h-full w-full overflow-hidden" style="background: {{ $teacher->gradient }}">
+                                    @if ($teacher->photo_url)
+                                        <img src="{{ $teacher->photo_url }}"
+                                             alt="{{ $teacher->name }}"
+                                             class="h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-105">
+                                    @else
+                                        <div class="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-white/15 to-transparent p-6 text-center">
+                                            <span class="flex h-20 w-20 items-center justify-center rounded-full bg-white/15 text-4xl font-extrabold text-white ring-1 ring-white/30 backdrop-blur-sm">
                                                 {{ mb_strtoupper(mb_substr($teacher->name, 0, 1)) }}
                                             </span>
-                                        @endif
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                            <span class="badge bg-brand-50 text-brand-700">{{ $teacher->subject }}</span>
-                                            <span class="badge bg-amber-100 text-amber-800">⭐ {{ $teacher->experience_years }} yil</span>
-                                        </div>
-                                        <h2 class="mt-1.5 truncate text-lg font-extrabold text-slate-900 sm:text-xl">{{ $teacher->name }}</h2>
-                                        @if ($teacher->headline)
-                                            <p class="mt-0.5 line-clamp-2 text-xs font-medium text-slate-500">{{ $teacher->headline }}</p>
-                                        @endif
-                                    </div>
-                                </div>
-
-                                {{-- Ustozning aloqa va ish vaqti --}}
-                                <div class="mt-4 grid grid-cols-1 gap-1.5 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-2 sm:gap-2">
-                                    @if ($teacher->work_hours)
-                                        <div class="flex items-center gap-1.5 truncate">
-                                            <span>🕒</span>
-                                            <span class="truncate font-medium">{{ $teacher->work_hours }}</span>
-                                        </div>
-                                    @endif
-                                    @if ($teacher->phone)
-                                        <div class="flex items-center gap-1.5 truncate">
-                                            <span>📞</span>
-                                            <span class="truncate font-medium">{{ $teacher->phone }}</span>
                                         </div>
                                     @endif
                                 </div>
 
-                                {{-- O'quvchisining top natijasi --}}
-                                @if ($topResult)
-                                    <div class="mt-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3 sm:mt-4 sm:p-3.5">
-                                        <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <span class="text-xs font-bold uppercase tracking-wider text-emerald-700">🏆 O'quvchi natijasi</span>
-                                            <span class="badge bg-emerald-600 text-white">{{ $topResult->score }}</span>
-                                        </div>
-                                        <p class="mt-1.5 text-sm font-bold text-slate-900">{{ $topResult->student_name }}</p>
-                                        @if ($topResult->achievement)
-                                            <p class="text-xs text-slate-600">{{ $topResult->achievement }}</p>
-                                        @endif
-                                    </div>
-                                @endif
-
-                                <div class="mt-4 flex flex-col items-stretch justify-between gap-2.5 border-t border-slate-100 pt-3.5 sm:mt-5 sm:flex-row sm:items-center sm:pt-4">
-                                    <span class="text-center text-xs font-semibold text-slate-500 sm:text-left">
-                                        🎓 {{ $teacher->results_count }} ta yuqori natija va sertifikat
+                                {{-- Pastki qismdagi nafis va ko'zga tashlanmaydigan shaffof qatlam --}}
+                                <div class="inset-x-0 bottom-0 absolute bg-gradient-to-t from-slate-950/85 via-slate-950/35 to-transparent p-4 pt-12 transition-opacity duration-300">
+                                    <span class="inline-block rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/90 ring-1 ring-white/20 backdrop-blur-md">
+                                        {{ $teacher->subject }}
                                     </span>
-                                    <a href="{{ route('teachers.show', $teacher) }}" class="btn-primary !px-4 !py-2.5 text-xs">
-                                        Natijalarni ko'rish →
-                                    </a>
+                                    <h2 class="mt-1 truncate text-sm font-bold text-white/95 sm:text-base">
+                                        {{ $teacher->name }}
+                                    </h2>
+                                    <span class="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-brand-200/80 opacity-80 transition-all group-hover:translate-x-0.5 group-hover:text-white group-hover:opacity-100">
+                                        Ma'lumotni ko'rish →
+                                    </span>
                                 </div>
-                            </div>
+
+                                @if ($topResult)
+                                    <span class="sr-only">{{ $topResult->student_name }} — {{ $topResult->score }}</span>
+                                @endif
+                            </a>
                         @endforeach
                     </div>
 
-                    {{-- Aylana ustoz avatarlari (Pastki indikatorlar) --}}
-                    @if ($teachers->count() > 1)
-                        <div class="mt-4 flex items-center justify-center gap-3">
-                            @foreach ($teachers as $index => $teacher)
+                    {{-- Nafis nuqtali indikatorlar --}}
+                    @if ($showcaseTeachers->count() > 1)
+                        <div class="mt-3 flex items-center justify-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15 backdrop-blur-md">
+                            @foreach ($showcaseTeachers as $index => $teacher)
                                 <button type="button"
                                         @click="goTo({{ $index }})"
-                                        :class="active === {{ $index }} ? 'ring-4 ring-accent-400 scale-110 opacity-100' : 'opacity-60 hover:opacity-90'"
-                                        class="relative h-11 w-11 overflow-hidden rounded-full bg-white/20 transition-all duration-300"
-                                        title="{{ $teacher->name }} — {{ $teacher->subject }}">
-                                    @if ($teacher->photo_url)
-                                        <img src="{{ $teacher->photo_url }}" alt="{{ $teacher->name }}" class="h-full w-full object-cover">
-                                    @else
-                                        <span class="flex h-full w-full items-center justify-center text-sm font-extrabold text-white" style="background: {{ $teacher->gradient }}">
-                                            {{ mb_strtoupper(mb_substr($teacher->name, 0, 1)) }}
-                                        </span>
-                                    @endif
+                                        :class="active === {{ $index }} ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'"
+                                        class="h-1.5 rounded-full transition-all duration-500"
+                                        aria-label="{{ $teacher->name }}">
                                 </button>
                             @endforeach
                         </div>
@@ -207,56 +170,6 @@
         @endforeach
     </div>
 </section>
-
-{{-- USTOZLAR VA NATIJALAR --}}
-@if ($teachers->isNotEmpty())
-<section class="bg-slate-900 py-20 text-white">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-                <span class="badge bg-brand-500/20 text-brand-300 ring-1 ring-brand-400/30">👨‍🏫 Bizning jamoa</span>
-                <h2 class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">Tajribali ustozlar va natijalar</h2>
-                <p class="mt-2 text-slate-400">Ustozning ustiga bosib, uning o'quvchilari olgan sertifikatlar va natijalarni ko'ring</p>
-            </div>
-            <a href="{{ route('teachers.index') }}" class="btn border border-white/20 bg-white/10 text-white hover:bg-white/20">Barcha ustozlar →</a>
-        </div>
-
-        <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            @foreach ($teachers->take(3) as $teacher)
-                <a href="{{ route('teachers.show', $teacher) }}" class="group flex flex-col justify-between rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur transition-all duration-300 hover:-translate-y-1.5 hover:border-brand-400/50 hover:bg-white/10">
-                    <div>
-                        <div class="flex items-center gap-4">
-                            <div class="h-16 w-16 shrink-0 overflow-hidden rounded-2xl ring-2 ring-white/20" style="background: {{ $teacher->gradient }}">
-                                @if ($teacher->photo_url)
-                                    <img src="{{ $teacher->photo_url }}" alt="{{ $teacher->name }}" class="h-full w-full object-cover">
-                                @else
-                                    <span class="flex h-full w-full items-center justify-center text-2xl font-extrabold text-white">
-                                        {{ mb_strtoupper(mb_substr($teacher->name, 0, 1)) }}
-                                    </span>
-                                @endif
-                            </div>
-                            <div>
-                                <span class="badge bg-brand-500/30 text-brand-200">{{ $teacher->subject }}</span>
-                                <h3 class="mt-1.5 text-lg font-extrabold text-white group-hover:text-accent-400">{{ $teacher->name }}</h3>
-                                <p class="text-xs text-slate-400">{{ $teacher->experience_years }} yil tajriba · {{ $teacher->results_count }} ta sertifikat</p>
-                            </div>
-                        </div>
-
-                        @if ($teacher->headline)
-                            <p class="mt-4 text-sm text-slate-300">{{ $teacher->headline }}</p>
-                        @endif
-                    </div>
-
-                    <div class="mt-6 flex items-center justify-between border-t border-white/10 pt-4 text-xs text-slate-300">
-                        <span>🕒 {{ $teacher->work_hours ?: 'Du–Sha: 09:00–19:00' }}</span>
-                        <span class="font-bold text-accent-400 group-hover:translate-x-1 transition-transform">Natijalar →</span>
-                    </div>
-                </a>
-            @endforeach
-        </div>
-    </div>
-</section>
-@endif
 
 {{-- OMMABOP KURSLAR --}}
 <section class="bg-white py-20">
