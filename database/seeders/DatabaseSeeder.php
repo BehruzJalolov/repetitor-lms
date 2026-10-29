@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Course;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Support\Phone;
@@ -34,7 +35,7 @@ class DatabaseSeeder extends Seeder
                     'experience_years' => 9,
                     'headline' => 'Milliy sertifikat A+ (100%) sohibi · 450+ o\'quvchisi davlat granti asosida talaba bo\'lgan',
                     'bio' => "9 yillik tajribaga ega oliy toifali matematika repetitori. Murakkab mavzularni eng sodda va tez yechiladigan usullar (layfxaklar) bilan tushuntiradi.\n\nHar bir o'quvchi bilan individual test tahlili va DTM / Milliy sertifikat standartidagi baza ustida ishlanadi.",
-                    'phone' => '+998 90 123 45 67',
+                    'phone' => '+998 90 911 22 33',
                     'email' => 'sardor.math@repetitor.uz',
                     'telegram' => '@sardor_math_uz',
                     'work_hours' => 'Dushanba–Shanba: 09:00 – 20:00',
@@ -112,6 +113,83 @@ class DatabaseSeeder extends Seeder
                 foreach ($results as $idx => $res) {
                     $res['position'] = $idx + 1;
                     $teacher->results()->create($res);
+                }
+            }
+        }
+
+        if (Course::count() === 0) {
+            $sardor = Teacher::where('slug', 'sardor-karimov')->first();
+            $nilufar = Teacher::where('slug', 'nilufar-rustamova')->first();
+            $ulugbek = Teacher::where('slug', 'ulugbek-rahimov')->first();
+
+            $courses = [
+                [
+                    'teacher_id' => $sardor?->id,
+                    'title' => 'Matematika: Milliy Sertifikat A+ va DTM Maksimal Kurs',
+                    'slug' => 'matematika-milliy-sertifikat-a-plus',
+                    'description' => 'Noldan boshlab murakkab tekstli masalalar, funksiyalar, hosila, integral va stereometriyani eng tez yechish usullari bilan mukammal o\'rganing.',
+                    'price' => 250000,
+                    'is_active' => true,
+                    'lessons' => [
+                        [
+                            'title' => '1-dars. Natural va butun sonlar. Tezkor hisoblash sirlari (Bepul)',
+                            'description' => 'Imtihonda vaqtni 3 barobar tejaydigan asosiy matematik qoidalar va mantiqiy usullar.',
+                            'youtube_url' => 'https://www.youtube.com/watch?v=aircAruvnKk',
+                            'position' => 1,
+                            'is_free' => true,
+                        ],
+                        [
+                            'title' => '2-dars. Kvadrat tenglamalar va Viyet teoremasining maxfiy qo\'llanilishi',
+                            'description' => 'Murakkab tenglamalarni diskriminantsiz 10 soniyada yechish metodikasi.',
+                            'youtube_url' => 'https://www.youtube.com/watch?v=WUvTyaaNkzM',
+                            'position' => 2,
+                            'is_free' => false,
+                        ],
+                    ],
+                ],
+                [
+                    'teacher_id' => $nilufar?->id,
+                    'title' => 'IELTS 7.5+ Intensive: Reading, Listening, Writing & Speaking',
+                    'slug' => 'ielts-7-5-intensive-kurs',
+                    'description' => 'Xalqaro CELTA metodikasi asosida IELTS va CEFR C1 darajasiga qisqa muddatda tayyorlovchi to\'liq video kurs.',
+                    'price' => 300000,
+                    'is_active' => true,
+                    'lessons' => [
+                        [
+                            'title' => '1-dars. IELTS Reading: True / False / Not Given strategiyasi (Bepul)',
+                            'description' => 'Matnni to\'liq o\'qimasdan kalit so\'zlar orqali 100% aniq javob topish.',
+                            'youtube_url' => 'https://www.youtube.com/watch?v=rfscVS0vTik',
+                            'position' => 1,
+                            'is_free' => true,
+                        ],
+                    ],
+                ],
+                [
+                    'teacher_id' => $ulugbek?->id,
+                    'title' => 'Kimyo va Biologiya: Tibbiyot Oliygohlariga Tayyorlov (Bepul Boshlang\'ich)',
+                    'slug' => 'kimyo-biologiya-tibbiyot-tayyorlov',
+                    'description' => 'Tibbiyot yo\'nalishiga topshiruvchi abituriyentlar uchun kimyo masalalarini formulasiz, mantiqiy usulda ishlash kursi.',
+                    'price' => 0,
+                    'is_active' => true,
+                    'lessons' => [
+                        [
+                            'title' => '1-dars. Kimyoviy elementlar davriy sistemasi va valentlik',
+                            'description' => 'Barcha kimyoviy reaksiyalar va masalalarning poydevori.',
+                            'youtube_url' => 'https://www.youtube.com/watch?v=FSyAehMdpyI',
+                            'position' => 1,
+                            'is_free' => true,
+                        ],
+                    ],
+                ],
+            ];
+
+            foreach ($courses as $courseData) {
+                $lessons = $courseData['lessons'];
+                unset($courseData['lessons']);
+                $course = Course::create($courseData);
+
+                foreach ($lessons as $lessonData) {
+                    $course->lessons()->create($lessonData);
                 }
             }
         }

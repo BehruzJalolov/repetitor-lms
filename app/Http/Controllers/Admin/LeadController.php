@@ -11,22 +11,36 @@ class LeadController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
         $status = $request->input('status', 'all');
         abort_unless(in_array($status, ['all', 'new', 'contacted', 'enrolled'], true), 404);
 
-        $leads = Lead::with('course')
+        $teacherScope = fn ($query) => $query->when(
+            $user->isTeacher(),
+            fn ($q) => $q->where(function ($sub) use ($user) {
+                $sub->whereNull('course_id')
+                    ->orWhereHas('course', fn ($cq) => $cq->where('teacher_id', $user->teacher_id));
+            })
+        );
+
+        $leads = $teacherScope(Lead::with('course'))
             ->when($status !== 'all', fn ($q) => $q->where('status', $status))
             ->latest()
             ->paginate(15)
             ->withQueryString();
 
-        $counts = Lead::selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
+        $counts = $teacherScope(Lead::query())
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
 
         return view('admin.leads.index', compact('leads', 'status', 'counts'));
     }
 
     public function updateStatus(Request $request, Lead $lead): RedirectResponse
     {
+        abort_unless($request->user()->canManageLead($lead), 403);
+
         $data = $request->validate([
             'status' => ['required', 'in:new,contacted,enrolled'],
         ]);
@@ -36,8 +50,10 @@ class LeadController extends Controller
         return back()->with('success', 'Murojaat holati yangilandi.');
     }
 
-    public function destroy(Lead $lead): RedirectResponse
+    public function destroy(Request $request, Lead $lead): RedirectResponse
     {
+        abort_unless($request->user()->canManageLead($lead), 403);
+
         $lead->delete();
 
         return back()->with('success', 'Murojaat o\'chirildi.');

@@ -104,12 +104,96 @@ class User extends Authenticatable
     }
 
     /**
+     * Ustoz faqat o'ziga biriktirilgan kursni (Bosh Admin esa barcha kurslarni) boshqara oladi.
+     */
+    public function canManageCourse(Course $course): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        if (! $this->isTeacher() || ! $this->hasPermission('manage_courses')) {
+            return false;
+        }
+
+        return $this->teacher_id !== null && $course->teacher_id === $this->teacher_id;
+    }
+
+    /**
+     * Ustoz faqat o'ziga tegishli jonli efirni (Bosh Admin esa barcha efirlarni) boshqara oladi.
+     */
+    public function canManageStream(LiveStream $stream): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        if (! $this->isTeacher() || ! $this->hasPermission('manage_streams')) {
+            return false;
+        }
+
+        return $this->teacher_id !== null && $stream->teacher_id === $this->teacher_id;
+    }
+
+    /**
+     * Ustoz faqat o'zining kurslariga yuborilgan to'lov cheklarini ko'ra oladi va tasdiqlay oladi.
+     */
+    public function canManageSubscription(Subscription $subscription): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        if (! $this->isTeacher() || ! $this->hasPermission('manage_subscriptions')) {
+            return false;
+        }
+
+        $course = $subscription->relationLoaded('course')
+            ? $subscription->course
+            : $subscription->course()->first();
+
+        return $this->teacher_id !== null && $course && $course->teacher_id === $this->teacher_id;
+    }
+
+    /**
+     * Ustoz faqat o'zining kurslariga (yoki umumiy) yuborilgan murojaatlarni boshqara oladi.
+     */
+    public function canManageLead(Lead $lead): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        if (! $this->isTeacher() || ! $this->hasPermission('manage_leads')) {
+            return false;
+        }
+
+        if ($this->teacher_id === null) {
+            return false;
+        }
+
+        if ($lead->course_id === null) {
+            return true;
+        }
+
+        $course = $lead->relationLoaded('course')
+            ? $lead->course
+            : $lead->course()->first();
+
+        return $course && $course->teacher_id === $this->teacher_id;
+    }
+
+    /**
      * Foydalanuvchi kursning pullik darslarini ko'ra oladimi?
-     * Admin, Ustoz yoki bepul kurs — doim; o'quvchi — faqat tasdiqlangan va muddati o'tmagan obuna bilan.
+     * Bosh Admin, kursning o'z ustozi yoki bepul kurs — doim; o'quvchi — faqat tasdiqlangan va muddati o'tmagan obuna bilan.
      */
     public function hasAccessTo(Course $course): bool
     {
-        if ($this->isAdmin() || $course->price === 0) {
+        if ($this->isSuperAdmin() || $course->price === 0) {
+            return true;
+        }
+
+        if ($this->isTeacher() && $this->teacher_id !== null && $course->teacher_id === $this->teacher_id) {
             return true;
         }
 

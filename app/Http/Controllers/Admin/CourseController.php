@@ -14,7 +14,10 @@ class CourseController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
+
         $courses = Course::with('teacher')->withCount('lessons')
+            ->when($user->isTeacher(), fn ($q) => $q->where('teacher_id', $user->teacher_id))
             ->when($request->filled('q'), fn ($q) => $q->where('title', 'like', '%'.$request->input('q').'%'))
             ->latest()
             ->paginate(10)
@@ -23,11 +26,19 @@ class CourseController extends Controller
         return view('admin.courses.index', compact('courses'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
+        $user = $request->user();
+        $teachers = Teacher::orderBy('name')
+            ->when($user->isTeacher(), fn ($q) => $q->whereKey($user->teacher_id))
+            ->get();
+
         return view('admin.courses.form', [
-            'course' => new Course(['is_active' => true]),
-            'teachers' => Teacher::orderBy('name')->get(),
+            'course' => new Course([
+                'is_active' => true,
+                'teacher_id' => $user->isTeacher() ? $user->teacher_id : null,
+            ]),
+            'teachers' => $teachers,
         ]);
     }
 
@@ -46,23 +57,32 @@ class CourseController extends Controller
             ->with('success', 'Kurs yaratildi. Endi darslarni qo\'shing.');
     }
 
-    public function show(Course $course)
+    public function show(Request $request, Course $course)
     {
+        abort_unless($request->user()->canManageCourse($course), 403);
         $course->load('lessons');
 
         return view('admin.courses.show', compact('course'));
     }
 
-    public function edit(Course $course)
+    public function edit(Request $request, Course $course)
     {
+        $user = $request->user();
+        abort_unless($user->canManageCourse($course), 403);
+
+        $teachers = Teacher::orderBy('name')
+            ->when($user->isTeacher(), fn ($q) => $q->whereKey($user->teacher_id))
+            ->get();
+
         return view('admin.courses.form', [
             'course' => $course,
-            'teachers' => Teacher::orderBy('name')->get(),
+            'teachers' => $teachers,
         ]);
     }
 
     public function update(Request $request, Course $course): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($course), 403);
         $data = $this->validated($request);
 
         if ($request->hasFile('thumbnail')) {
@@ -78,9 +98,14 @@ class CourseController extends Controller
         return redirect()->route('admin.courses.show', $course)->with('success', 'Kurs yangilandi.');
     }
 
-    public function destroy(Course $course): RedirectResponse
+    public function destroy(Request $request, Course $course): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($course), 403);
+
         foreach ($course->lessons as $lesson) {
+            if ($lesson->video_path) {
+                Storage::disk('local')->delete($lesson->video_path);
+            }
             if ($lesson->file_path) {
                 Storage::disk('local')->delete($lesson->file_path);
             }
@@ -104,6 +129,10 @@ class CourseController extends Controller
             'price' => ['required', 'integer', 'min:0', 'max:100000000'],
             'thumbnail' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
+
+        if ($request->user()->isTeacher()) {
+            $data['teacher_id'] = $request->user()->teacher_id;
+        }
 
         $data['is_active'] = $request->boolean('is_active');
         unset($data['thumbnail']);

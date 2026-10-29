@@ -10,10 +10,19 @@ class StudentController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
+        $isTeacher = $user->isTeacher();
+
         $students = User::where('role', 'student')
+            ->when(
+                $isTeacher,
+                fn ($q) => $q->whereHas('subscriptions', fn ($sq) => $sq->whereHas('course', fn ($cq) => $cq->where('teacher_id', $user->teacher_id)))
+            )
             ->withCount([
-                'subscriptions as approved_count' => fn ($q) => $q->where('status', 'approved'),
-                'subscriptions as pending_count' => fn ($q) => $q->where('status', 'pending'),
+                'subscriptions as approved_count' => fn ($q) => $q->where('status', 'approved')
+                    ->when($isTeacher, fn ($sq) => $sq->whereHas('course', fn ($cq) => $cq->where('teacher_id', $user->teacher_id))),
+                'subscriptions as pending_count' => fn ($q) => $q->where('status', 'pending')
+                    ->when($isTeacher, fn ($sq) => $sq->whereHas('course', fn ($cq) => $cq->where('teacher_id', $user->teacher_id))),
             ])
             ->when($request->filled('q'), function ($query) use ($request) {
                 $term = '%'.$request->input('q').'%';

@@ -1,0 +1,53 @@
+databases:
+  - name: repetitor-lms-db
+    databaseName: repetitor_lms
+    user: repetitor_lms_user
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: repetitor-lms
+    runtime: docker
+    plan: starter
+    healthCheckPath: /up
+    disk:
+      name: repetitor-storage
+      mountPath: /var/www/html/storage
+      sizeGB: 10
+    envVars:
+      - key: APP_NAME
+        value: "Repetitor LMS"
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: warning
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: repetitor-lms-db
+          property: connectionString
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: FILESYSTEM_DISK
+        value: local
+      - key: ADMIN_NAME
+        value: "Bosh Admin"
+      - key: ADMIN_PHONE
+        value: "+998901234567"
+      - key: ADMIN_EMAIL
+        value: "admin@repetitor.uz"
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\PasswordResetCodeMail;
 use App\Models\User;
 use App\Services\EskizSmsService;
+use App\Services\TelegramNotificationService;
 use App\Support\Phone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,9 +35,9 @@ class PasswordResetController extends Controller
     }
 
     /**
-     * SMS yoki Email orqali 6 xonali tasdiqlash kodi yuborish
+     * SMS, Email yoki Telegram Bot orqali 6 xonali tasdiqlash kodi yuborish
      */
-    public function sendResetCode(Request $request, EskizSmsService $smsService): RedirectResponse
+    public function sendResetCode(Request $request, EskizSmsService $smsService, TelegramNotificationService $telegram): RedirectResponse
     {
         $request->validate([
             'phone' => ['required', 'string', 'max:255'],
@@ -111,6 +112,16 @@ class PasswordResetController extends Controller
             $appName = config('app.name', 'RepetitorLMS');
             $smsMessage = "{$appName}: Parolni tiklash kodi: {$code}. Ushbu kodni hech kimga bermang!";
             $sent = $smsService->send($identifier, $smsMessage);
+        }
+
+        // Agar foydalanuvchi Telegram botga ulangan bo'lsa, kodni Telegram orqali ham yuboramiz
+        if ($user->telegram_chat_id) {
+            $tgSent = $telegram->sendToChat(
+                (string) $user->telegram_chat_id,
+                "🔐 <b>Parolni tiklash kodi:</b> <code>{$code}</code>\n\n"
+                .'⚠️ Ushbu kodni hech kimga bermang! Kod 15 daqiqa davomida amal qiladi.'
+            );
+            $sent = $sent || $tgSent;
         }
 
         if (! $sent) {

@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\Subscription;
+use App\Models\User;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SubscriptionController extends Controller
 {
@@ -20,10 +22,6 @@ class SubscriptionController extends Controller
             return back()->with('error', 'Bu kurs sizda allaqachon ochilgan.');
         }
 
-        if (Subscription::where('user_id', $user->id)->where('course_id', $course->id)->where('status', 'pending')->exists()) {
-            return back()->with('error', 'Chekingiz allaqachon yuborilgan va tekshirilmoqda.');
-        }
-
         $request->validate([
             'receipt' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ], [
@@ -34,13 +32,27 @@ class SubscriptionController extends Controller
             'receipt.uploaded' => 'Rasm yuklanmadi. Hajmi juda katta bo\'lishi mumkin.',
         ]);
 
-        Subscription::create([
-            'user_id' => $user->id,
-            'course_id' => $course->id,
-            'price' => $course->price,
-            'receipt_image' => $request->file('receipt')->store('receipts', 'local'),
-            'status' => 'pending',
-        ]);
+        $created = DB::transaction(function () use ($request, $user, $course): bool {
+            User::whereKey($user->id)->lockForUpdate()->first();
+
+            if (Subscription::where('user_id', $user->id)->where('course_id', $course->id)->where('status', 'pending')->exists()) {
+                return false;
+            }
+
+            Subscription::create([
+                'user_id' => $user->id,
+                'course_id' => $course->id,
+                'price' => $course->price,
+                'receipt_image' => $request->file('receipt')->store('receipts', 'local'),
+                'status' => 'pending',
+            ]);
+
+            return true;
+        });
+
+        if (! $created) {
+            return back()->with('error', 'Chekingiz allaqachon yuborilgan va tekshirilmoqda.');
+        }
 
         $formattedPrice = number_format($course->price, 0, '', ' ');
         $telegram->send(

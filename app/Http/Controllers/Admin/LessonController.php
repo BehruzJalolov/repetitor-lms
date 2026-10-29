@@ -13,8 +13,9 @@ use Illuminate\Support\Facades\Storage;
 
 class LessonController extends Controller
 {
-    public function create(Course $course)
+    public function create(Request $request, Course $course)
     {
+        abort_unless($request->user()->canManageCourse($course), 403);
         $lesson = new Lesson(['is_free' => $course->lessons()->count() === 0]);
 
         return view('admin.lessons.form', compact('course', 'lesson'));
@@ -22,6 +23,7 @@ class LessonController extends Controller
 
     public function store(Request $request, Course $course): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($course), 403);
         $data = $this->validated($request);
 
         if ($request->hasFile('video_file')) {
@@ -39,8 +41,9 @@ class LessonController extends Controller
             ->with('success', 'Dars yaratildi! Endi dars ostida onlayn test savollarini qo\'shishingiz mumkin.');
     }
 
-    public function edit(Lesson $lesson)
+    public function edit(Request $request, Lesson $lesson)
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         $lesson->load('questions');
 
         return view('admin.lessons.form', ['course' => $lesson->course, 'lesson' => $lesson]);
@@ -48,6 +51,7 @@ class LessonController extends Controller
 
     public function update(Request $request, Lesson $lesson): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         $data = $this->validated($request, $lesson);
 
         if ($request->hasFile('video_file')) {
@@ -71,8 +75,9 @@ class LessonController extends Controller
         return redirect()->route('admin.courses.show', $lesson->course_id)->with('success', 'Dars yangilandi.');
     }
 
-    public function destroy(Lesson $lesson): RedirectResponse
+    public function destroy(Request $request, Lesson $lesson): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         $courseId = $lesson->course_id;
         $this->deleteVideo($lesson);
         $this->deleteFile($lesson);
@@ -82,8 +87,9 @@ class LessonController extends Controller
         return redirect()->route('admin.courses.show', $courseId)->with('success', 'Dars o\'chirildi.');
     }
 
-    public function move(Lesson $lesson, string $direction): RedirectResponse
+    public function move(Request $request, Lesson $lesson, string $direction): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         abort_unless(in_array($direction, ['up', 'down'], true), 404);
 
         DB::transaction(function () use ($lesson, $direction) {
@@ -104,8 +110,9 @@ class LessonController extends Controller
         return back();
     }
 
-    public function file(Lesson $lesson)
+    public function file(Request $request, Lesson $lesson)
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         abort_unless($lesson->file_path && Storage::disk('local')->exists($lesson->file_path), 404);
 
         return Storage::disk('local')->response($lesson->file_path);
@@ -113,6 +120,7 @@ class LessonController extends Controller
 
     public function storeQuestion(Request $request, Lesson $lesson): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         $data = $request->validate([
             'question' => ['required', 'string', 'max:1000'],
             'option_a' => ['required', 'string', 'max:255'],
@@ -135,8 +143,9 @@ class LessonController extends Controller
             ->with('success', 'Test savoli qo\'shildi.');
     }
 
-    public function destroyQuestion(Lesson $lesson, LessonQuestion $question): RedirectResponse
+    public function destroyQuestion(Request $request, Lesson $lesson, LessonQuestion $question): RedirectResponse
     {
+        abort_unless($request->user()->canManageCourse($lesson->course), 403);
         abort_unless($question->lesson_id === $lesson->id, 404);
         $question->delete();
 

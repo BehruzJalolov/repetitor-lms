@@ -15,21 +15,32 @@ use Illuminate\View\View;
 
 class StreamController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $user = $request->user();
+
         $streams = LiveStream::with(['course', 'teacher'])
+            ->when($user->isTeacher(), fn ($q) => $q->where('teacher_id', $user->teacher_id))
             ->orderByRaw("CASE status WHEN 'live' THEN 1 WHEN 'scheduled' THEN 2 ELSE 3 END")
             ->latest()
             ->paginate(15);
 
-        $courses = Course::where('is_active', true)->orderBy('title')->get();
-        $teachers = Teacher::where('is_active', true)->orderBy('name')->get();
+        $courses = Course::where('is_active', true)
+            ->when($user->isTeacher(), fn ($q) => $q->where('teacher_id', $user->teacher_id))
+            ->orderBy('title')
+            ->get();
+        $teachers = Teacher::where('is_active', true)
+            ->when($user->isTeacher(), fn ($q) => $q->whereKey($user->teacher_id))
+            ->orderBy('name')
+            ->get();
 
         return view('admin.streams.index', compact('streams', 'courses', 'teachers'));
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $user = $request->user();
+
         $data = $request->validate([
             'title' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:2000'],
@@ -51,6 +62,14 @@ class StreamController extends Controller
             'title.required' => 'Jonli efir mavzusini kiriting.',
         ]);
 
+        if ($user->isTeacher()) {
+            $data['teacher_id'] = $user->teacher_id;
+            if (! empty($data['course_id'])) {
+                $course = Course::findOrFail($data['course_id']);
+                abort_unless($user->canManageCourse($course), 403);
+            }
+        }
+
         $data['room_code'] = 'RepetitorLMS_'.Str::upper(Str::random(12));
         $data['status'] = $request->boolean('start_now') ? 'live' : 'scheduled';
 
@@ -64,8 +83,9 @@ class StreamController extends Controller
         return back()->with('success', 'Jonli efir rejalashtirildi.');
     }
 
-    public function start(LiveStream $stream, TelegramNotificationService $telegram): RedirectResponse
+    public function start(Request $request, LiveStream $stream, TelegramNotificationService $telegram): RedirectResponse
     {
+        abort_unless($request->user()->canManageStream($stream), 403);
         $stream->update(['status' => 'live']);
 
         $url = route('streams.show', $stream);
@@ -81,15 +101,17 @@ class StreamController extends Controller
             ->with('success', '🔴 Jonli efir faollashtirildi!');
     }
 
-    public function end(LiveStream $stream): RedirectResponse
+    public function end(Request $request, LiveStream $stream): RedirectResponse
     {
+        abort_unless($request->user()->canManageStream($stream), 403);
         $stream->update(['status' => 'ended']);
 
         return back()->with('success', '⏹ Jonli efir yakunlandi.');
     }
 
-    public function destroy(LiveStream $stream): RedirectResponse
+    public function destroy(Request $request, LiveStream $stream): RedirectResponse
     {
+        abort_unless($request->user()->canManageStream($stream), 403);
         $stream->delete();
 
         return back()->with('success', 'Jonli efir o\'chirildi.');

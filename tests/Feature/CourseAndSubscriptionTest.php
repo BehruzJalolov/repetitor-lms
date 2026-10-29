@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Course;
+use App\Models\Lead;
 use App\Models\Lesson;
 use App\Models\LiveStream;
 use App\Models\Setting;
@@ -578,5 +579,265 @@ class CourseAndSubscriptionTest extends TestCase
         // 4. Teacher is blocked from ungranted sections (Subscriptions & Site Settings)
         $this->get(route('admin.subscriptions.index'))->assertForbidden();
         $this->get(route('admin.settings.edit'))->assertForbidden();
+    }
+
+    public function test_teacher_can_only_manage_own_courses_lessons_and_streams(): void
+    {
+        $teacherA = Teacher::create([
+            'name' => 'Sardor Ustoz',
+            'slug' => 'sardor-ustoz',
+            'subject' => 'Matematika',
+            'experience_years' => 8,
+            'is_active' => true,
+        ]);
+
+        $teacherB = Teacher::create([
+            'name' => 'Nilufar Ustoz',
+            'slug' => 'nilufar-ustoz',
+            'subject' => 'Ingliz tili',
+            'experience_years' => 6,
+            'is_active' => true,
+        ]);
+
+        $teacherUserA = User::factory()->create([
+            'role' => 'teacher',
+            'teacher_id' => $teacherA->id,
+            'permissions' => ['manage_courses', 'manage_streams'],
+        ]);
+
+        $courseA = Course::create([
+            'teacher_id' => $teacherA->id,
+            'title' => 'Sardor Matematika Kursi',
+            'slug' => 'sardor-matematika-kursi',
+            'price' => 200000,
+            'is_active' => true,
+        ]);
+
+        $courseB = Course::create([
+            'teacher_id' => $teacherB->id,
+            'title' => 'Nilufar IELTS Kursi',
+            'slug' => 'nilufar-ielts-kursi',
+            'price' => 300000,
+            'is_active' => true,
+        ]);
+
+        $lessonB = $courseB->lessons()->create([
+            'title' => 'IELTS Listening 1-dars',
+            'youtube_url' => 'https://www.youtube.com/watch?v=rfscVS0vTik',
+            'position' => 1,
+            'is_free' => true,
+        ]);
+
+        $streamB = LiveStream::create([
+            'teacher_id' => $teacherB->id,
+            'course_id' => $courseB->id,
+            'title' => 'Nilufar Speaking Stream',
+            'stream_type' => 'jitsi',
+            'room_code' => 'RepetitorLMS_TESTROOM1',
+            'status' => 'scheduled',
+        ]);
+
+        // Teacher A can view/edit their own course
+        $this->actingAs($teacherUserA)->get(route('admin.courses.edit', $courseA))->assertOk();
+
+        // Teacher A is strictly forbidden (403) from viewing/editing/deleting Teacher B's course, lessons, or stream
+        $this->actingAs($teacherUserA)->get(route('admin.courses.edit', $courseB))->assertForbidden();
+        $this->actingAs($teacherUserA)->delete(route('admin.courses.destroy', $courseB))->assertForbidden();
+        $this->actingAs($teacherUserA)->get(route('admin.lessons.edit', $lessonB))->assertForbidden();
+        $this->actingAs($teacherUserA)->post(route('admin.streams.end', $streamB))->assertForbidden();
+        $this->actingAs($teacherUserA)->delete(route('admin.streams.destroy', $streamB))->assertForbidden();
+    }
+
+    public function test_student_cannot_access_unsubscribed_paid_lesson_chat_or_submit_duplicate_receipts(): void
+    {
+        Storage::fake('local');
+
+        $student = User::factory()->create();
+        $course = Course::create([
+            'title' => 'Yopiq Premium Kurs',
+            'slug' => 'yopiq-premium-kurs',
+            'price' => 500000,
+            'is_active' => true,
+        ]);
+
+        $paidLesson = $course->lessons()->create([
+            'title' => 'Yopiq pullik dars',
+            'youtube_url' => 'https://www.youtube.com/watch?v=rfscVS0vTik',
+            'position' => 1,
+            'is_free' => false,
+        ]);
+
+        // Unsubscribed student cannot post chat messages to a paid lesson
+        $this->actingAs($student)->post(route('chat.store'), [
+            'lesson_id' => $paidLesson->id,
+            'message' => 'Ruxsatsiz darsga xabar yozish',
+        ])->assertForbidden();
+
+        // Student submits first receipt -> accepted (pending)
+        $receipt1 = UploadedFile::fake()->image('chek1.jpg');
+        $this->actingAs($student)->post(route('subscriptions.store', $course), [
+            'receipt' => $receipt1,
+        ])->assertRedirect(route('courses.show', $course));
+
+        // Student submits duplicate receipt while first is pending -> blocked
+        $receipt2 = UploadedFile::fake()->image('chek2.jpg');
+        $this->actingAs($student)->post(route('subscriptions.store', $course), [
+            'receipt' => $receipt2,
+        ])->assertSessionHas('error');
+
+        $this->assertSame(
+            1,
+            Subscription::where('user_id', $student->id)->where('course_id', $course->id)->count()
+        );
+    }
+
+    public function test_teacher_with_manage_subscriptions_and_leads_can_only_access_own_course_records(): void
+    {
+        Storage::fake('local');
+
+        $teacherA = Teacher::create([
+            'name' => 'Sardor Ustoz',
+            'slug' => 'sardor-ustoz-sub',
+            'subject' => 'Matematika',
+            'experience_years' => 8,
+            'is_active' => true,
+        ]);
+
+        $teacherB = Teacher::create([
+            'name' => 'Nilufar Ustoz',
+            'slug' => 'nilufar-ustoz-sub',
+            'subject' => 'Ingliz tili',
+            'experience_years' => 6,
+            'is_active' => true,
+        ]);
+
+        $teacherUserA = User::factory()->create([
+            'role' => 'teacher',
+            'teacher_id' => $teacherA->id,
+            'permissions' => ['manage_subscriptions', 'manage_leads'],
+        ]);
+
+        $student = User::factory()->create();
+
+        $courseA = Course::create([
+            'teacher_id' => $teacherA->id,
+            'title' => 'Sardor Matematika',
+            'slug' => 'sardor-matematika-sub',
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+
+        $courseB = Course::create([
+            'teacher_id' => $teacherB->id,
+            'title' => 'Nilufar IELTS',
+            'slug' => 'nilufar-ielts-sub',
+            'price' => 300000,
+            'is_active' => true,
+        ]);
+
+        $paidLessonB = $courseB->lessons()->create([
+            'title' => 'Nilufar yopiq darsi',
+            'youtube_url' => 'https://www.youtube.com/watch?v=rfscVS0vTik',
+            'position' => 1,
+            'is_free' => false,
+        ]);
+
+        $subA = Subscription::create([
+            'user_id' => $student->id,
+            'course_id' => $courseA->id,
+            'price' => 250000,
+            'receipt_image' => UploadedFile::fake()->image('a.jpg')->store('receipts', 'local'),
+            'status' => 'pending',
+        ]);
+
+        $subB = Subscription::create([
+            'user_id' => $student->id,
+            'course_id' => $courseB->id,
+            'price' => 300000,
+            'receipt_image' => UploadedFile::fake()->image('b.jpg')->store('receipts', 'local'),
+            'status' => 'pending',
+        ]);
+
+        $leadB = Lead::create([
+            'course_id' => $courseB->id,
+            'name' => 'Talaba B',
+            'phone' => '+998901112233',
+            'status' => 'new',
+        ]);
+
+        // 1. Teacher A can approve subscription for their own course (Course A)
+        $this->actingAs($teacherUserA)->post(route('admin.subscriptions.approve', $subA), [
+            'duration' => '1',
+        ])->assertRedirect();
+        $this->assertSame('approved', $subA->fresh()->status);
+
+        // 2. Teacher A is strictly forbidden (403) from viewing receipt, approving, or rejecting Teacher B's subscription
+        $this->actingAs($teacherUserA)->get(route('admin.subscriptions.receipt', $subB))->assertForbidden();
+        $this->actingAs($teacherUserA)->post(route('admin.subscriptions.approve', $subB), ['duration' => '1'])->assertForbidden();
+        $this->actingAs($teacherUserA)->post(route('admin.subscriptions.reject', $subB), ['admin_comment' => 'Bekor'])->assertForbidden();
+        $this->assertSame('pending', $subB->fresh()->status);
+
+        // 3. Teacher A is strictly forbidden (403) from modifying or deleting Teacher B's leads
+        $this->actingAs($teacherUserA)->patch(route('admin.leads.status', $leadB), ['status' => 'contacted'])->assertForbidden();
+        $this->actingAs($teacherUserA)->delete(route('admin.leads.destroy', $leadB))->assertForbidden();
+
+        // 4. Teacher A does NOT get automatic free access to Teacher B's paid lessons
+        $this->actingAs($teacherUserA)->get(route('lessons.show', [$courseB, $paidLessonB]))
+            ->assertRedirect(route('courses.show', $courseB));
+    }
+
+    public function test_subscription_can_only_be_approved_or_rejected_when_pending(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $student = User::factory()->create();
+        $course = Course::create([
+            'title' => 'Parallel Test Kursi',
+            'slug' => 'parallel-test-kursi',
+            'price' => 200000,
+            'is_active' => true,
+        ]);
+
+        $subscription = Subscription::create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'price' => 200000,
+            'receipt_image' => 'receipts/test.jpg',
+            'status' => 'pending',
+        ]);
+
+        // 1st approval succeeds
+        $this->actingAs($admin)->post(route('admin.subscriptions.approve', $subscription), [
+            'duration' => '3',
+        ])->assertSessionHas('success');
+
+        $this->assertSame('approved', $subscription->fresh()->status);
+
+        // 2nd duplicate approval on already-approved subscription is blocked inside lockForUpdate()
+        $this->actingAs($admin)->post(route('admin.subscriptions.approve', $subscription), [
+            'duration' => '12',
+        ])->assertSessionHas('error');
+
+        // Rejecting an already-approved subscription is also blocked
+        $this->actingAs($admin)->post(route('admin.subscriptions.reject', $subscription), [
+            'admin_comment' => 'Xato bosildi',
+        ])->assertSessionHas('error');
+
+        $this->assertSame('approved', $subscription->fresh()->status);
+    }
+
+    public function test_single_device_session_invalidates_previous_session_on_second_login(): void
+    {
+        $student = User::factory()->create([
+            'phone' => '+998907778899',
+            'password' => 'secret12345',
+            'current_session_id' => 'old_device_session_id_123',
+        ]);
+
+        // When student makes a request while their session ID doesn't match current_session_id, EnsureSingleSession logs them out
+        $this->actingAs($student)
+            ->get(route('my-courses'))
+            ->assertRedirect(route('login'));
+
+        $this->assertGuest();
     }
 }

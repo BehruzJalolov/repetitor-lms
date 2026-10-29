@@ -43,8 +43,8 @@ Route::middleware('auth')->group(function () {
     Route::put('/profil/parolni-yangilash', [ProfileController::class, 'updatePassword'])->middleware('throttle:5,1')->name('profile.password.update');
 
     Route::get('/kurslar/{course:slug}/darslar/{lesson}', [LessonController::class, 'show'])->name('lessons.show');
-    Route::post('/kurslar/{course:slug}/darslar/{lesson}/tugatish', [LessonController::class, 'complete'])->name('lessons.complete');
-    Route::post('/kurslar/{course:slug}/darslar/{lesson}/test', [LessonController::class, 'submitQuiz'])->name('lessons.quiz');
+    Route::post('/kurslar/{course:slug}/darslar/{lesson}/tugatish', [LessonController::class, 'complete'])->middleware('throttle:20,1')->name('lessons.complete');
+    Route::post('/kurslar/{course:slug}/darslar/{lesson}/test', [LessonController::class, 'submitQuiz'])->middleware('throttle:15,1')->name('lessons.quiz');
     Route::get('/kurslar/{course:slug}/darslar/{lesson}/video', [LessonController::class, 'video'])->name('lessons.video');
     Route::get('/kurslar/{course:slug}/darslar/{lesson}/fayl', [LessonController::class, 'file'])->name('lessons.file');
     Route::get('/kurslar/{course:slug}/sertifikat', [CertificateController::class, 'show'])->name('courses.certificate');
@@ -55,11 +55,11 @@ Route::middleware('auth')->group(function () {
 
     // O'quvchilar va Ustoz muloqot chati
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
-    Route::get('/chat/xabarlar', [ChatController::class, 'messages'])->name('chat.messages');
+    Route::get('/chat/xabarlar', [ChatController::class, 'messages'])->middleware('throttle:60,1')->name('chat.messages');
     Route::post('/chat', [ChatController::class, 'store'])->middleware('throttle:20,1')->name('chat.store');
-    Route::delete('/chat/{chatMessage}', [ChatController::class, 'destroy'])->name('chat.destroy');
-    Route::post('/chat/{chatMessage}/pin', [ChatController::class, 'togglePin'])->name('chat.pin');
-    Route::post('/chat/foydalanuvchi/{user}/bloklash', [ChatController::class, 'toggleBan'])->name('chat.ban');
+    Route::delete('/chat/{chatMessage}', [ChatController::class, 'destroy'])->middleware('throttle:30,1')->name('chat.destroy');
+    Route::post('/chat/{chatMessage}/pin', [ChatController::class, 'togglePin'])->middleware('throttle:30,1')->name('chat.pin');
+    Route::post('/chat/foydalanuvchi/{user}/bloklash', [ChatController::class, 'toggleBan'])->middleware('throttle:30,1')->name('chat.ban');
 
     Route::post('/kurslar/{course:slug}/tolov', [SubscriptionController::class, 'store'])
         ->middleware('throttle:10,1')

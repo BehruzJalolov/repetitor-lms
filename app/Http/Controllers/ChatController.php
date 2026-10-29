@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ChatMessage;
 use App\Models\Course;
+use App\Models\Lesson;
 use App\Models\User;
 use App\Support\ProfanityFilter;
 use Illuminate\Http\JsonResponse;
@@ -100,11 +101,28 @@ class ChatController extends Controller
                 : back()->withInput()->with('error', $filterError);
         }
 
+        $courseId = $data['course_id'] ?? null;
+        $lessonId = $data['lesson_id'] ?? null;
+        $parentId = $data['parent_id'] ?? null;
+
+        if ($lessonId) {
+            $lesson = Lesson::with('course')->findOrFail($lessonId);
+            $courseId = $lesson->course_id;
+            abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
+        }
+
+        if ($parentId) {
+            $parent = ChatMessage::findOrFail($parentId);
+            if ($parent->course_id !== $courseId) {
+                $parentId = null;
+            }
+        }
+
         $msg = ChatMessage::create([
             'user_id' => $user->id,
-            'course_id' => $data['course_id'] ?? null,
-            'lesson_id' => $data['lesson_id'] ?? null,
-            'parent_id' => $data['parent_id'] ?? null,
+            'course_id' => $courseId,
+            'lesson_id' => $lessonId,
+            'parent_id' => $parentId,
             'message' => $text,
         ]);
 
