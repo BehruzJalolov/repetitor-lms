@@ -10,6 +10,7 @@ class Subscription extends Model
     protected $fillable = [
         'user_id',
         'course_id',
+        'price',
         'receipt_image',
         'status',
         'admin_comment',
@@ -19,6 +20,7 @@ class Subscription extends Model
     protected function casts(): array
     {
         return [
+            'price' => 'integer',
             'expires_at' => 'datetime',
         ];
     }

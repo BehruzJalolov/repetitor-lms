@@ -8,8 +8,8 @@
         <h1 class="text-2xl font-extrabold text-slate-900">O'quvchilar</h1>
         <p class="text-sm text-slate-500">Jami: {{ $students->total() }} ta</p>
     </div>
-    <form method="GET">
-        <input type="search" name="q" value="{{ request('q') }}" placeholder="Ism yoki telefon..." class="input w-72">
+    <form method="GET" class="w-full sm:w-auto">
+        <input type="search" name="q" value="{{ request('q') }}" placeholder="Ism, telefon yoki email..." class="input w-full sm:w-72">
     </form>
 </div>
 
@@ -18,7 +18,7 @@
         <thead class="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
             <tr>
                 <th class="px-5 py-3">O'quvchi</th>
-                <th class="px-5 py-3">Telefon</th>
+                <th class="px-5 py-3">Aloqa</th>
                 <th class="px-5 py-3">Ochilgan kurslar</th>
                 <th class="px-5 py-3">Kutilayotgan</th>
                 <th class="px-5 py-3">Ro'yxatdan o'tgan</th>
@@ -28,7 +28,12 @@
             @forelse ($students as $student)
                 <tr class="hover:bg-slate-50">
                     <td class="px-5 py-3.5 font-semibold text-slate-800">{{ $student->name }}</td>
-                    <td class="px-5 py-3.5 text-slate-600">{{ $student->phone }}</td>
+                    <td class="px-5 py-3.5 text-slate-600">
+                        <div>{{ $student->phone }}</div>
+                        @if ($student->email)
+                            <div class="text-xs text-slate-400">{{ $student->email }}</div>
+                        @endif
+                    </td>
                     <td class="px-5 py-3.5"><span class="badge bg-emerald-100 text-emerald-700">{{ $student->approved_count }}</span></td>
                     <td class="px-5 py-3.5">
                         @if ($student->pending_count)

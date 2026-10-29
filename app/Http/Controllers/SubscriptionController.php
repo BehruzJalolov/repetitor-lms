@@ -4,12 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\Subscription;
+use App\Services\TelegramNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class SubscriptionController extends Controller
 {
-    public function store(Request $request, Course $course): RedirectResponse
+    public function store(Request $request, Course $course, TelegramNotificationService $telegram): RedirectResponse
     {
         abort_unless($course->is_active, 404);
 
@@ -36,9 +37,19 @@ class SubscriptionController extends Controller
         Subscription::create([
             'user_id' => $user->id,
             'course_id' => $course->id,
+            'price' => $course->price,
             'receipt_image' => $request->file('receipt')->store('receipts', 'local'),
             'status' => 'pending',
         ]);
+
+        $formattedPrice = number_format($course->price, 0, '', ' ');
+        $telegram->send(
+            "🧾 <b>Yangi to'lov cheki yuborildi!</b>\n\n"
+            ."👤 <b>O'quvchi:</b> {$user->name} ({$user->phone})\n"
+            ."📚 <b>Kurs:</b> {$course->title}\n"
+            ."💰 <b>Summa:</b> {$formattedPrice} so'm\n\n"
+            .'Admin panelga kirib chekni tasdiqlashingiz mumkin.'
+        );
 
         return redirect()->route('courses.show', $course)
             ->with('success', 'Chek yuborildi! Repetitor tekshirgach, darslar ochiladi.');

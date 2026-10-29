@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Lesson extends Model
 {
@@ -13,6 +14,7 @@ class Lesson extends Model
         'title',
         'description',
         'youtube_url',
+        'video_path',
         'file_path',
         'position',
         'is_free',
@@ -27,7 +29,7 @@ class Lesson extends Model
     }
 
     /**
-     * YouTube havolasidan video ID sini ajratadi (watch, youtu.be, embed, shorts).
+     * Har qanday YouTube havolasidan (watch, youtu.be, embed, shorts, live, mobile, iframe) yoki 11 belgili ID dan video ID sini ajratadi.
      */
     public static function extractYoutubeId(?string $url): ?string
     {
@@ -35,7 +37,13 @@ class Lesson extends Model
             return null;
         }
 
-        $pattern = '~(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})~i';
+        $url = trim($url);
+
+        if (preg_match('/^[A-Za-z0-9_-]{11}$/', $url)) {
+            return $url;
+        }
+
+        $pattern = '~(?:(?:www\.|m\.)?youtube(?:-nocookie)?\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/|v/)|youtu\.be/)([A-Za-z0-9_-]{11})~i';
 
         return preg_match($pattern, $url, $m) ? $m[1] : null;
     }
@@ -45,15 +53,30 @@ class Lesson extends Model
         return static::extractYoutubeId($this->youtube_url);
     }
 
+    public function hasUploadedVideo(): bool
+    {
+        return ! empty($this->video_path);
+    }
+
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class);
     }
 
+    public function questions(): HasMany
+    {
+        return $this->hasMany(LessonQuestion::class)->orderBy('position')->orderBy('id');
+    }
+
+    public function chatMessages(): HasMany
+    {
+        return $this->hasMany(ChatMessage::class)->latest();
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)
-            ->withPivot('is_completed')
+            ->withPivot(['is_completed', 'quiz_score', 'quiz_passed'])
             ->withTimestamps();
     }
 }

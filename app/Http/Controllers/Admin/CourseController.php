@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Course;
+use App\Models\Teacher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -13,7 +14,7 @@ class CourseController extends Controller
 {
     public function index(Request $request)
     {
-        $courses = Course::withCount('lessons')
+        $courses = Course::with('teacher')->withCount('lessons')
             ->when($request->filled('q'), fn ($q) => $q->where('title', 'like', '%'.$request->input('q').'%'))
             ->latest()
             ->paginate(10)
@@ -24,7 +25,10 @@ class CourseController extends Controller
 
     public function create()
     {
-        return view('admin.courses.form', ['course' => new Course(['is_active' => true])]);
+        return view('admin.courses.form', [
+            'course' => new Course(['is_active' => true]),
+            'teachers' => Teacher::orderBy('name')->get(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -51,7 +55,10 @@ class CourseController extends Controller
 
     public function edit(Course $course)
     {
-        return view('admin.courses.form', compact('course'));
+        return view('admin.courses.form', [
+            'course' => $course,
+            'teachers' => Teacher::orderBy('name')->get(),
+        ]);
     }
 
     public function update(Request $request, Course $course): RedirectResponse
@@ -91,6 +98,7 @@ class CourseController extends Controller
     private function validated(Request $request): array
     {
         $data = $request->validate([
+            'teacher_id' => ['nullable', 'exists:teachers,id'],
             'title' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:5000'],
             'price' => ['required', 'integer', 'min:0', 'max:100000000'],

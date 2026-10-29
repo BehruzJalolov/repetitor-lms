@@ -43,6 +43,7 @@ class SubscriptionController extends Controller
 
         $subscription->update([
             'status' => 'approved',
+            'price' => $subscription->price > 0 ? $subscription->price : $subscription->course->price,
             'admin_comment' => null,
             // 0 = cheksiz
             'expires_at' => $months > 0 ? now()->addMonths($months) : null,

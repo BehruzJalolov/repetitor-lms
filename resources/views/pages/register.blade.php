@@ -25,6 +25,11 @@
                     @error('phone') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                 </div>
                 <div>
+                    <label for="email" class="label">Email manzil</label>
+                    <input id="email" name="email" type="email" value="{{ old('email') }}" placeholder="ali@gmail.com" class="input @error('email') border-red-400 @enderror" autocomplete="email" required>
+                    @error('email') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label for="password" class="label">Parol</label>
                     <input id="password" name="password" :type="show ? 'text' : 'password'" placeholder="Kamida 8 ta belgi" class="input @error('password') border-red-400 @enderror" autocomplete="new-password" required>
                     @error('password') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror

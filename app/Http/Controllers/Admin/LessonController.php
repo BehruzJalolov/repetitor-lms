@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Lesson;
+use App\Models\LessonQuestion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,24 +24,39 @@ class LessonController extends Controller
     {
         $data = $this->validated($request);
 
+        if ($request->hasFile('video_file')) {
+            $data['video_path'] = $request->file('video_file')->store('lessons/videos', 'local');
+        }
+
         if ($request->hasFile('file')) {
             $data['file_path'] = $request->file('file')->store('lessons', 'local');
         }
 
         $data['position'] = ((int) $course->lessons()->max('position')) + 1;
-        $course->lessons()->create($data);
+        $lesson = $course->lessons()->create($data);
 
-        return redirect()->route('admin.courses.show', $course)->with('success', 'Dars qo\'shildi.');
+        return redirect()->route('admin.lessons.edit', $lesson)
+            ->with('success', 'Dars yaratildi! Endi dars ostida onlayn test savollarini qo\'shishingiz mumkin.');
     }
 
     public function edit(Lesson $lesson)
     {
+        $lesson->load('questions');
+
         return view('admin.lessons.form', ['course' => $lesson->course, 'lesson' => $lesson]);
     }
 
     public function update(Request $request, Lesson $lesson): RedirectResponse
     {
-        $data = $this->validated($request);
+        $data = $this->validated($request, $lesson);
+
+        if ($request->hasFile('video_file')) {
+            $this->deleteVideo($lesson);
+            $data['video_path'] = $request->file('video_file')->store('lessons/videos', 'local');
+        } elseif ($request->boolean('remove_video')) {
+            $this->deleteVideo($lesson);
+            $data['video_path'] = null;
+        }
 
         if ($request->hasFile('file')) {
             $this->deleteFile($lesson);
@@ -58,6 +74,7 @@ class LessonController extends Controller
     public function destroy(Lesson $lesson): RedirectResponse
     {
         $courseId = $lesson->course_id;
+        $this->deleteVideo($lesson);
         $this->deleteFile($lesson);
         $lesson->delete();
         $this->resequence($courseId);
@@ -94,25 +111,82 @@ class LessonController extends Controller
         return Storage::disk('local')->response($lesson->file_path);
     }
 
-    private function validated(Request $request): array
+    public function storeQuestion(Request $request, Lesson $lesson): RedirectResponse
     {
+        $data = $request->validate([
+            'question' => ['required', 'string', 'max:1000'],
+            'option_a' => ['required', 'string', 'max:255'],
+            'option_b' => ['required', 'string', 'max:255'],
+            'option_c' => ['required', 'string', 'max:255'],
+            'option_d' => ['required', 'string', 'max:255'],
+            'correct_option' => ['required', 'in:a,b,c,d'],
+        ], [
+            'question.required' => 'Savol matnini kiriting.',
+            'option_a.required' => 'A variantni kiriting.',
+            'option_b.required' => 'B variantni kiriting.',
+            'option_c.required' => 'C variantni kiriting.',
+            'option_d.required' => 'D variantni kiriting.',
+        ]);
+
+        $data['position'] = ((int) $lesson->questions()->max('position')) + 1;
+        $lesson->questions()->create($data);
+
+        return redirect()->route('admin.lessons.edit', $lesson)
+            ->with('success', 'Test savoli qo\'shildi.');
+    }
+
+    public function destroyQuestion(Lesson $lesson, LessonQuestion $question): RedirectResponse
+    {
+        abort_unless($question->lesson_id === $lesson->id, 404);
+        $question->delete();
+
+        return redirect()->route('admin.lessons.edit', $lesson)
+            ->with('success', 'Test savoli o\'chirildi.');
+    }
+
+    private function validated(Request $request, ?Lesson $lesson = null): array
+    {
+        $hasExistingVideo = $lesson && $lesson->video_path && ! $request->boolean('remove_video');
+
         $data = $request->validate([
             'title' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:5000'],
-            'youtube_url' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
-                if (! Lesson::extractYoutubeId($value)) {
-                    $fail('To\'g\'ri YouTube havolasini kiriting (masalan: https://youtu.be/xxxxxxxxxxx).');
-                }
-            }],
+            'youtube_url' => [
+                'nullable',
+                'string',
+                'max:255',
+                function ($attribute, $value, $fail) use ($request, $hasExistingVideo) {
+                    $trimmed = trim((string) $value);
+                    if ($trimmed === '' && ! $request->hasFile('video_file') && ! $hasExistingVideo) {
+                        $fail('YouTube havolasini kiriting yoki kompyuterdan video fayl yuklang.');
+
+                        return;
+                    }
+                    if ($trimmed !== '' && ! Lesson::extractYoutubeId($trimmed)) {
+                        $fail('To\'g\'ri YouTube havolasini kiriting (masalan: https://youtu.be/xxxxxxxxxxx yoki https://www.youtube.com/watch?v=xxxxxxxxxxx).');
+                    }
+                },
+            ],
+            'video_file' => ['nullable', 'file', 'mimes:mp4,webm,mov,m4v', 'max:512000'],
             'file' => ['nullable', 'file', 'mimes:pdf', 'max:20480'],
+        ], [
+            'video_file.mimes' => 'Video fayl MP4, WEBM yoki MOV formatida bo\'lishi kerak.',
+            'video_file.max' => 'Video fayl hajmi 500 MB dan oshmasligi kerak.',
         ]);
 
-        // Havolani yagona ko'rinishga keltiramiz
-        $data['youtube_url'] = 'https://www.youtube.com/watch?v='.Lesson::extractYoutubeId($data['youtube_url']);
+        $ytId = Lesson::extractYoutubeId($data['youtube_url'] ?? null);
+        $data['youtube_url'] = $ytId ? 'https://www.youtube.com/watch?v='.$ytId : null;
         $data['is_free'] = $request->boolean('is_free');
-        unset($data['file']);
+        unset($data['file'], $data['video_file']);
 
         return $data;
+    }
+
+    private function deleteVideo(Lesson $lesson): void
+    {
+        if ($lesson->video_path) {
+            Storage::disk('local')->delete($lesson->video_path);
+        }
     }
 
     private function deleteFile(Lesson $lesson): void

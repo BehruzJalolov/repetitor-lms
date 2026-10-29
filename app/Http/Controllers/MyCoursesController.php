@@ -12,6 +12,7 @@ class MyCoursesController extends Controller
         $user = $request->user();
 
         $subscriptions = $user->subscriptions()
+            ->whereHas('course', fn ($q) => $q->where('is_active', true))
             ->with(['course' => fn ($q) => $q->withCount('lessons')])
             ->latest()
             ->get()

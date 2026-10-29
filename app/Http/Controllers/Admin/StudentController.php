@@ -17,7 +17,9 @@ class StudentController extends Controller
             ])
             ->when($request->filled('q'), function ($query) use ($request) {
                 $term = '%'.$request->input('q').'%';
-                $query->where(fn ($q) => $q->where('name', 'like', $term)->orWhere('phone', 'like', $term));
+                $query->where(fn ($q) => $q->where('name', 'like', $term)
+                    ->orWhere('phone', 'like', $term)
+                    ->orWhere('email', 'like', $term));
             })
             ->latest()
             ->paginate(15)

@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureSingleSession;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,8 +19,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureAdmin::class,
         ]);
 
-        // Har bir veb so'rovda bitta-qurilma qoidasini tekshiradi
-        $middleware->appendToGroup('web', EnsureSingleSession::class);
+        // Har bir veb so'rovda bitta-qurilma qoidasi va xavfsizlik sarlavhalarini tekshiradi
+        $middleware->appendToGroup('web', [
+            EnsureSingleSession::class,
+            SecurityHeaders::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

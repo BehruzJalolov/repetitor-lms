@@ -8,6 +8,7 @@ use App\Support\Phone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -25,12 +26,17 @@ class LoginController extends Controller
             'phone' => ['required', 'string'],
             'password' => ['required', 'string'],
         ], [
-            'phone.required' => 'Telefon raqamni kiriting.',
+            'phone.required' => 'Telefon raqam yoki emailni kiriting.',
             'password.required' => 'Parolni kiriting.',
         ]);
 
-        $phone = Phone::normalize($request->input('phone'));
-        $throttleKey = Str::lower(($phone ?? $request->input('phone')).'|'.$request->ip());
+        $rawInput = trim((string) $request->input('phone'));
+        $isEmail = str_contains($rawInput, '@');
+        $identifier = $isEmail
+            ? (filter_var(Str::lower($rawInput), FILTER_VALIDATE_EMAIL) ?: null)
+            : Phone::normalize($rawInput);
+
+        $throttleKey = Str::lower(($identifier ?? $rawInput).'|'.$request->ip());
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
@@ -40,11 +46,15 @@ class LoginController extends Controller
             ]);
         }
 
-        if (! $phone || ! Auth::attempt(['phone' => $phone, 'password' => $request->input('password')], $request->boolean('remember'))) {
+        $credentials = $isEmail
+            ? ['email' => $identifier, 'password' => $request->input('password')]
+            : ['phone' => $identifier, 'password' => $request->input('password')];
+
+        if (! $identifier || ! Auth::attempt($credentials, false)) {
             RateLimiter::hit($throttleKey, 60);
 
             throw ValidationException::withMessages([
-                'phone' => "Telefon raqam yoki parol noto'g'ri.",
+                'phone' => "Login ma'lumotlari yoki parol noto'g'ri.",
             ]);
         }
 
@@ -53,8 +63,27 @@ class LoginController extends Controller
 
         /** @var User $user */
         $user = Auth::user();
-        // Yangi sessiya faol bo'ladi, eski qurilmadagi sessiya o'chadi
-        $user->forceFill(['current_session_id' => $request->session()->getId()])->save();
+
+        // Yangi remember_token beramiz (eski qurilmadagi "Meni eslab qol" cookie'si bekor bo'ladi)
+        $user->setRememberToken(Str::random(60));
+
+        if ($request->boolean('remember')) {
+            Auth::login($user, true);
+        }
+
+        $currentSessionId = $request->session()->getId();
+
+        if (! $user->isAdmin()) {
+            DB::table('sessions')
+                ->where('user_id', $user->id)
+                ->where('id', '!=', $currentSessionId)
+                ->delete();
+        }
+
+        $user->forceFill([
+            'current_session_id' => $currentSessionId,
+            'remember_token' => $user->getRememberToken(),
+        ])->save();
 
         return redirect()->intended($user->isAdmin() ? route('admin.dashboard') : route('home'));
     }

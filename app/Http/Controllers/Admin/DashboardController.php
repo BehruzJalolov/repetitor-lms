@@ -3,19 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Course;
 use App\Models\Subscription;
 use App\Models\User;
-use App\Models\Course;
-use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
     public function __invoke()
     {
-        $revenue = (int) DB::table('subscriptions')
-            ->join('courses', 'courses.id', '=', 'subscriptions.course_id')
-            ->where('subscriptions.status', 'approved')
-            ->sum('courses.price');
+        $revenue = (int) Subscription::where('status', 'approved')->sum('price');
 
         return view('admin.dashboard', [
             'students' => User::where('role', 'student')->count(),

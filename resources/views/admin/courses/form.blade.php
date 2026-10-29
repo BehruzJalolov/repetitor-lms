@@ -13,10 +13,23 @@
     @csrf
     @if ($editing) @method('PUT') @endif
 
-    <div>
-        <label for="title" class="label">Kurs nomi</label>
-        <input id="title" name="title" type="text" value="{{ old('title', $course->title) }}" class="input @error('title') border-red-400 @enderror" required>
-        @error('title') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+    <div class="grid gap-6 sm:grid-cols-2">
+        <div>
+            <label for="title" class="label">Kurs nomi</label>
+            <input id="title" name="title" type="text" value="{{ old('title', $course->title) }}" class="input @error('title') border-red-400 @enderror" required>
+            @error('title') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+        </div>
+
+        <div>
+            <label for="teacher_id" class="label">Kurs ustozi (repetitor)</label>
+            <select id="teacher_id" name="teacher_id" class="input @error('teacher_id') border-red-400 @enderror">
+                <option value="">— Tanlanmagan —</option>
+                @foreach ($teachers as $t)
+                    <option value="{{ $t->id }}" @selected(old('teacher_id', $course->teacher_id) == $t->id)>{{ $t->name }} ({{ $t->subject }})</option>
+                @endforeach
+            </select>
+            @error('teacher_id') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+        </div>
     </div>
 
     <div>

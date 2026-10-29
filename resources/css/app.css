@@ -55,10 +55,11 @@
 @layer base {
     html {
         scroll-behavior: smooth;
+        overflow-x: hidden;
     }
 
     body {
-        @apply bg-slate-50 text-slate-800 antialiased;
+        @apply bg-slate-50 text-slate-800 antialiased overflow-x-hidden;
     }
 }
 
@@ -92,7 +93,7 @@
 }
 
 @utility input {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm placeholder:text-slate-400 transition focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base sm:text-sm placeholder:text-slate-400 transition focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100;
 }
 
 @utility label {

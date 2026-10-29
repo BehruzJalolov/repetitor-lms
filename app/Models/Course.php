@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 class Course extends Model
 {
     protected $fillable = [
+        'teacher_id',
         'title',
         'slug',
         'description',
@@ -47,6 +49,11 @@ class Course extends Model
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
+    }
+
+    public function teacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class);
     }
 
     public function lessons(): HasMany

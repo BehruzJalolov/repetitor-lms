@@ -15,8 +15,8 @@
             <form class="mt-8 space-y-5" method="POST" action="{{ route('login.store') }}" x-data="{ show: false }">
                 @csrf
                 <div>
-                    <label for="phone" class="label">Telefon raqam</label>
-                    <input id="phone" name="phone" type="tel" value="{{ old('phone') }}" placeholder="+998 90 123 45 67" class="input @error('phone') border-red-400 @enderror" autocomplete="tel" required autofocus>
+                    <label for="phone" class="label">Telefon raqam yoki Email</label>
+                    <input id="phone" name="phone" type="text" value="{{ old('phone') }}" placeholder="+998 90 123 45 67 yoki email@namuna.uz" class="input @error('phone') border-red-400 @enderror" autocomplete="username" required autofocus>
                     @error('phone') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                 </div>
                 <div>
@@ -29,9 +29,12 @@
                     </div>
                     @error('password') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                 </div>
-                <label class="flex items-center gap-2 text-sm text-slate-500">
-                    <input type="checkbox" name="remember" class="rounded border-slate-300 text-brand-600 focus:ring-brand-200"> Meni eslab qol
-                </label>
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 text-sm text-slate-500">
+                        <input type="checkbox" name="remember" class="rounded border-slate-300 text-brand-600 focus:ring-brand-200"> Meni eslab qol
+                    </label>
+                    <a href="{{ route('password.request') }}" class="text-xs font-semibold text-brand-600 hover:underline">Parolni unutdingizmi?</a>
+                </div>
                 <button type="submit" id="login-submit" class="btn-primary btn-lg w-full">Kirish</button>
             </form>
 

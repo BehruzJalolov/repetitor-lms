@@ -17,15 +17,19 @@ class EnsureSingleSession
     {
         $user = $request->user();
 
-        if ($user && ! $user->isAdmin()
-            && $user->current_session_id
-            && $user->current_session_id !== $request->session()->getId()) {
-            Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
+        if ($user && ! $user->isAdmin()) {
+            // Agar foydalanuvchi "Meni eslab qol" (remember_token) orqali qayta kirgan bo'lsa,
+            // yangi sessiya ID sini saqlab qo'yamiz (boshqa qurilmadan kirilganda remember_token yangilanadi).
+            if (Auth::viaRemember()) {
+                $user->forceFill(['current_session_id' => $request->session()->getId()])->save();
+            } elseif ($user->current_session_id && $user->current_session_id !== $request->session()->getId()) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
 
-            return redirect()->route('login')
-                ->with('error', 'Akkauntingizga boshqa qurilmadan kirildi. Iltimos, qayta kiring.');
+                return redirect()->route('login')
+                    ->with('error', 'Akkauntingizga boshqa qurilmadan kirildi. Iltimos, qayta kiring.');
+            }
         }
 
         return $next($request);

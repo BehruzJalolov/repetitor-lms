@@ -38,7 +38,7 @@
                     </div>
                     <p class="text-sm text-slate-500">{{ $sub->user->phone }}</p>
                     <p class="mt-2 text-sm font-semibold text-slate-700">{{ $sub->course->title }}</p>
-                    <p class="text-sm text-slate-500">Narx: <b class="text-slate-800">{{ number_format($sub->course->price, 0, '', ' ') }} so'm</b> · {{ $sub->created_at->format('d.m.Y H:i') }}</p>
+                    <p class="text-sm text-slate-500">Narx: <b class="text-slate-800">{{ number_format($sub->price ?: $sub->course->price, 0, '', ' ') }} so'm</b> · {{ $sub->created_at->format('d.m.Y H:i') }}</p>
                     @if ($sub->status === 'approved')
                         <p class="mt-1 text-xs text-emerald-600">Muddat: {{ $sub->expires_at ? $sub->expires_at->format('d.m.Y').' gacha' : 'cheksiz' }}</p>
                     @endif
@@ -47,12 +47,12 @@
                     @endif
                 </div>
 
-                <div class="flex shrink-0 gap-2">
+                <div class="flex w-full shrink-0 gap-2 sm:w-auto">
                     @if ($sub->status !== 'approved')
-                        <button type="button" @click="mode = mode === 'approve' ? null : 'approve'" class="btn bg-emerald-500 text-white hover:bg-emerald-600">✓ Tasdiqlash</button>
+                        <button type="button" @click="mode = mode === 'approve' ? null : 'approve'" class="btn flex-1 bg-emerald-500 text-white hover:bg-emerald-600 sm:flex-initial">✓ Tasdiqlash</button>
                     @endif
                     @if ($sub->status !== 'rejected')
-                        <button type="button" @click="mode = mode === 'reject' ? null : 'reject'" class="btn border border-red-200 bg-white text-red-600 hover:bg-red-50">✕ Rad etish</button>
+                        <button type="button" @click="mode = mode === 'reject' ? null : 'reject'" class="btn flex-1 border border-red-200 bg-white text-red-600 hover:bg-red-50 sm:flex-initial">✕ Rad etish</button>
                     @endif
                 </div>
             </div>
