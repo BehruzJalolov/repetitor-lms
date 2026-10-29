@@ -21,14 +21,14 @@ class SettingController extends Controller
             'site_name' => Setting::get('site_name', 'RepetitorLMS'),
             'site_description' => Setting::get('site_description', 'Tajribali repetitor bilan onlayn o\'qing. Video darslar, konspektlar va testlar — barchasi bir joyda, istalgan vaqtda va istalgan qurilmada.'),
             'contact_phone' => Setting::get('contact_phone', config('admin.phone', '+998 90 123 45 67')),
-            'telegram_username' => Setting::get('telegram_username', '@repetitor_uz'),
+            'telegram_username' => Setting::get('telegram_username', config('services.telegram.channel_username', '@ITblockbehruz')),
             'contact_address' => Setting::get('contact_address', 'Toshkent shahri'),
             'card_number' => Setting::get('card_number', config('admin.card_number', '8600 0000 0000 0000')),
             'card_holder' => Setting::get('card_holder', config('admin.card_holder', 'Repetitor')),
             'has_bot_token' => $hasBotToken,
-            'telegram_bot_username' => Setting::get('telegram_bot_username', ''),
+            'telegram_bot_username' => Setting::get('telegram_bot_username', config('services.telegram.bot_username', '@RepetiXBot')),
             'telegram_chat_id' => Setting::get('telegram_chat_id', config('services.telegram.chat_id', '')),
-            'require_telegram_subscription' => Setting::get('require_telegram_subscription', '0') === '1',
+            'require_telegram_subscription' => Setting::get('require_telegram_subscription', config('services.telegram.require_subscription', true) ? '1' : '0') === '1',
             'blocked_words' => Setting::get('blocked_words', ''),
         ];
 

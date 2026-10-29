@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Course;
+use App\Models\Setting;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Support\Phone;
@@ -25,6 +26,21 @@ class DatabaseSeeder extends Seeder
             'role' => 'admin',
             'password' => config('admin.password'),
         ])->save();
+
+        // Standart Telegram bot va kanal sozlamalarini (agar bazada hali yo'q bo'lsa) yaratamiz
+        $defaultSettings = [];
+        if (Setting::get('telegram_bot_username') === null) {
+            $defaultSettings['telegram_bot_username'] = (string) config('services.telegram.bot_username', '@RepetiXBot');
+        }
+        if (Setting::get('telegram_username') === null) {
+            $defaultSettings['telegram_username'] = (string) config('services.telegram.channel_username', '@ITblockbehruz');
+        }
+        if (Setting::get('require_telegram_subscription') === null) {
+            $defaultSettings['require_telegram_subscription'] = config('services.telegram.require_subscription', true) ? '1' : '0';
+        }
+        if ($defaultSettings !== []) {
+            Setting::setMany($defaultSettings);
+        }
 
         if (Teacher::count() === 0) {
             $teachers = [

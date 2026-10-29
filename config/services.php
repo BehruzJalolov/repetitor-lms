@@ -37,7 +37,10 @@ return [
 
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME', '@RepetiXBot'),
+        'channel_username' => env('TELEGRAM_CHANNEL_USERNAME', '@ITblockbehruz'),
         'chat_id' => env('TELEGRAM_CHAT_ID'),
+        'require_subscription' => env('TELEGRAM_REQUIRE_SUBSCRIPTION', true),
     ],
 
 ];

@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -839,5 +840,30 @@ class CourseAndSubscriptionTest extends TestCase
             ->assertRedirect(route('login'));
 
         $this->assertGuest();
+    }
+
+    public function test_registration_uses_telegram_bot_by_default_even_on_fresh_database_and_never_sends_gmail(): void
+    {
+        Mail::fake();
+
+        // Even with an empty settings table (like a fresh Render deployment), registration uses Telegram Bot
+        $this->post(route('register.store'), [
+            'name' => 'Behruzbek Talaba',
+            'phone' => '+998 90 888 77 66',
+            'email' => 'behruz@example.com',
+            'password' => 'secret1234',
+            'password_confirmation' => 'secret1234',
+        ])->assertRedirect(route('register.verify'));
+
+        // Zero emails sent via Gmail/SMTP
+        Mail::assertNothingSent();
+
+        // Verification page shows Telegram Bot (@RepetiXBot) and Channel (@ITblockbehruz), not Gmail message
+        $this->get(route('register.verify'))
+            ->assertOk()
+            ->assertSee('Telegram orqali tasdiqlash')
+            ->assertSee('@RepetiXBot')
+            ->assertSee('@ITblockbehruz')
+            ->assertDontSee('pochtasiga 6 xonali tasdiqlash kodi yuborildi');
     }
 }

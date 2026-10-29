@@ -142,6 +142,11 @@ class TelegramNotificationService
 
             $response = Http::timeout(8)->get("https://api.telegram.org/bot{$token}/getUpdates", $params);
 
+            if ($response->status() === 409 && str_contains(strtolower($response->body()), 'webhook')) {
+                Http::timeout(6)->post("https://api.telegram.org/bot{$token}/deleteWebhook");
+                $response = Http::timeout(8)->get("https://api.telegram.org/bot{$token}/getUpdates", $params);
+            }
+
             if (! $response->successful() || ! $response->json('ok')) {
                 return;
             }
@@ -286,7 +291,7 @@ class TelegramNotificationService
     public function sendRegistrationMenu(string $chatId, string $firstName, string $regToken = ''): void
     {
         $siteName = e((string) Setting::get('site_name', 'RepetitorLMS'));
-        $channel = trim((string) Setting::get('telegram_username', ''));
+        $channel = trim((string) Setting::get('telegram_username', config('services.telegram.channel_username', '@ITblockbehruz')));
         $cleanChannel = ltrim($channel, '@');
         $context = $regToken !== '' ? Cache::get('tg_reg_context:'.$regToken) : null;
         $studentName = is_array($context) && ! empty($context['name']) ? e((string) $context['name']) : $firstName;
@@ -310,7 +315,7 @@ class TelegramNotificationService
      */
     private function buildDefaultInlineButtons(string $regToken = ''): array
     {
-        $channel = trim((string) Setting::get('telegram_username', ''));
+        $channel = trim((string) Setting::get('telegram_username', config('services.telegram.channel_username', '@ITblockbehruz')));
         $cleanChannel = ltrim($channel, '@');
         $buttons = [];
 
@@ -357,7 +362,7 @@ class TelegramNotificationService
      */
     public function verifySubscriptionAndSendCode(string $chatId, string $regToken, ?string $callbackId = null): array
     {
-        $channel = trim((string) Setting::get('telegram_username', ''));
+        $channel = trim((string) Setting::get('telegram_username', config('services.telegram.channel_username', '@ITblockbehruz')));
         $formattedChannel = $channel !== '' ? (str_starts_with($channel, '@') ? $channel : '@'.$channel) : '';
 
         if ($formattedChannel !== '') {

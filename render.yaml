@@ -51,3 +51,11 @@ services:
         value: "admin@repetitor.uz"
       - key: ADMIN_PASSWORD
         sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: "@RepetiXBot"
+      - key: TELEGRAM_CHANNEL_USERNAME
+        value: "@ITblockbehruz"
+      - key: TELEGRAM_REQUIRE_SUBSCRIPTION
+        value: "true"

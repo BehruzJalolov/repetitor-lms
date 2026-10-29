@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Mail\VerificationCodeMail;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\TelegramNotificationService;
@@ -16,8 +15,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
@@ -60,20 +57,6 @@ class RegisterController extends Controller
         ]);
 
         $tokenKey = 'reg:'.$data['email'];
-        $telegramRequired = $this->isTelegramSubscriptionRequired();
-
-        $existing = DB::table('password_reset_tokens')->where('phone', $tokenKey)->first();
-        if (! $telegramRequired && $existing && $existing->created_at) {
-            $availableAt = Carbon::parse($existing->created_at)->addSeconds(self::RESEND_COOLDOWN_SECONDS);
-            if ($availableAt->isFuture()) {
-                $secondsLeft = (int) ceil(now()->diffInSeconds($availableAt));
-
-                return back()->withInput()->withErrors([
-                    'email' => "Iltimos, yangi kod yuborish uchun {$secondsLeft} soniya kuting.",
-                ]);
-            }
-        }
-
         $code = (string) random_int(100000, 999999);
 
         DB::table('password_reset_tokens')->updateOrInsert(
@@ -84,22 +67,6 @@ class RegisterController extends Controller
                 'created_at' => now(),
             ]
         );
-
-        if (! $telegramRequired) {
-            try {
-                Mail::to($data['email'])->send(new VerificationCodeMail(
-                    code: $code,
-                    userName: $data['name'],
-                    purpose: "Ro'yxatdan o'tishni tasdiqlash",
-                    description: 'Hisobingizni faollashtirish uchun quyidagi 6 xonali tasdiqlash kodini saytga kiriting:',
-                ));
-            } catch (\Throwable $e) {
-                Log::error('Ro\'yxatdan o\'tish email xatosi: '.$e->getMessage());
-                DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
-
-                return back()->withInput()->with('error', 'Email manzilga tasdiqlash kodi yuborib bo\'lmadi. Manzilni tekshiring.');
-            }
-        }
 
         $telegramToken = Str::random(20);
 
@@ -122,16 +89,11 @@ class RegisterController extends Controller
             ],
         ]);
 
-        if ($telegramRequired) {
-            return redirect()->route('register.verify')
-                ->with('success', 'Ma\'lumotlar qabul qilindi! Endi Telegram botga kirib, kanalga obuna bo\'ling va kodni oling.');
-        }
-
         return redirect()->route('register.verify')
-            ->with('success', "{$data['email']} manziliga 6 xonali tasdiqlash kodi yuborildi.");
+            ->with('success', 'Ma\'lumotlar qabul qilindi! Endi Telegram botga kirib, kanalga obuna bo\'ling va 6 xonali tasdiqlash kodini oling.');
     }
 
-    public function showVerifyForm()
+    public function showVerifyForm(TelegramNotificationService $telegram)
     {
         $pending = $this->syncPendingTelegramState();
 
@@ -141,9 +103,10 @@ class RegisterController extends Controller
         }
 
         $telegramRequired = $this->isTelegramSubscriptionRequired();
-        $botUsername = ltrim((string) Setting::get('telegram_bot_username', ''), '@');
-        $channelUsername = ltrim((string) Setting::get('telegram_username', ''), '@');
+        $botUsername = ltrim((string) Setting::get('telegram_bot_username', config('services.telegram.bot_username', '@RepetiXBot')), '@');
+        $channelUsername = ltrim((string) Setting::get('telegram_username', config('services.telegram.channel_username', '@ITblockbehruz')), '@');
         $telegramToken = $pending['telegram_token'] ?? '';
+        $hasBotToken = $telegram->getToken() !== null;
 
         $botStartLink = $botUsername !== ''
             ? "https://t.me/{$botUsername}?start=reg_{$telegramToken}"
@@ -159,6 +122,7 @@ class RegisterController extends Controller
             'channelUsername',
             'botStartLink',
             'channelLink',
+            'hasBotToken',
         ));
     }
 
@@ -322,53 +286,38 @@ class RegisterController extends Controller
             ->with('success', "Xush kelibsiz, {$user->name}! Hisobingiz muvaffaqiyatli tasdiqlandi.");
     }
 
-    public function resend(): RedirectResponse
+    public function resend(TelegramNotificationService $telegram): RedirectResponse
     {
-        $pending = session('pending_registration');
+        $pending = $this->syncPendingTelegramState();
 
         if (! $pending) {
             return redirect()->route('register');
         }
 
-        $tokenKey = 'reg:'.$pending['email'];
-        $existing = DB::table('password_reset_tokens')->where('phone', $tokenKey)->first();
+        $regToken = (string) ($pending['telegram_token'] ?? '');
+        $chatId = $pending['telegram_chat_id'] ?? ($regToken !== '' ? $telegram->resolveUserChatIdByStartToken($regToken) : null);
 
-        if ($existing && $existing->created_at) {
-            $availableAt = Carbon::parse($existing->created_at)->addSeconds(self::RESEND_COOLDOWN_SECONDS);
-            if ($availableAt->isFuture()) {
-                $secondsLeft = (int) ceil(now()->diffInSeconds($availableAt));
-
-                return back()->withErrors([
-                    'code' => "Yangi kod so'rash uchun {$secondsLeft} soniya kuting.",
-                ]);
-            }
+        if (! $chatId) {
+            return back()->with('error', 'Kodni olish uchun avval 1-qadamdagi tugma orqali Telegram botga kirib START bosing.');
         }
 
-        $code = (string) random_int(100000, 999999);
+        Cache::put('tg_reg_context:'.$regToken, [
+            'name' => $pending['name'],
+            'email' => $pending['email'],
+            'phone' => $pending['phone'],
+        ], now()->addMinutes(45));
 
-        DB::table('password_reset_tokens')->updateOrInsert(
-            ['phone' => $tokenKey],
-            [
-                'token' => Hash::make($code),
-                'attempts' => 0,
-                'created_at' => now(),
-            ]
-        );
+        $result = $telegram->verifySubscriptionAndSendCode((string) $chatId, $regToken);
 
-        try {
-            Mail::to($pending['email'])->send(new VerificationCodeMail(
-                code: $code,
-                userName: $pending['name'],
-                purpose: "Ro'yxatdan o'tishni tasdiqlash",
-                description: 'Hisobingizni faollashtirish uchun quyidagi 6 xonali tasdiqlash kodini saytga kiriting:',
-            ));
-        } catch (\Throwable $e) {
-            Log::error('Ro\'yxatdan o\'tish qayta email xatosi: '.$e->getMessage());
-
-            return back()->with('error', 'Kod yuborishda xatolik yuz berdi.');
+        if (! $result['ok']) {
+            return back()->with('error', $result['message']);
         }
 
-        return back()->with('success', "{$pending['email']} manziliga yangi tasdiqlash kodi yuborildi.");
+        $pending['telegram_chat_id'] = (string) $chatId;
+        $pending['channel_verified'] = true;
+        session(['pending_registration' => $pending]);
+
+        return back()->with('success', 'Yangi 6 xonali tasdiqlash kodi Telegram botingizga yuborildi!');
     }
 
     /**
@@ -397,9 +346,8 @@ class RegisterController extends Controller
 
     private function isTelegramSubscriptionRequired(): bool
     {
-        return Setting::get('require_telegram_subscription', '0') === '1'
-            && ! empty(Setting::getSecret('telegram_bot_token', config('services.telegram.bot_token')))
-            && ! empty(Setting::get('telegram_bot_username'))
-            && ! empty(Setting::get('telegram_username'));
+        $defaultRequire = config('services.telegram.require_subscription', true) ? '1' : '0';
+
+        return Setting::get('require_telegram_subscription', $defaultRequire) === '1';
     }
 }

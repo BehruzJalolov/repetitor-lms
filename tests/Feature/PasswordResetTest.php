@@ -6,6 +6,7 @@ use App\Mail\PasswordResetCodeMail;
 use App\Mail\VerificationCodeMail;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -15,7 +16,7 @@ class PasswordResetTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_registration_requires_email_otp_verification_before_creating_user(): void
+    public function test_registration_requires_telegram_bot_otp_verification_before_creating_user(): void
     {
         Mail::fake();
 
@@ -30,18 +31,25 @@ class PasswordResetTest extends TestCase
         $response->assertRedirect(route('register.verify'));
         $this->assertGuest();
         $this->assertDatabaseMissing('users', ['email' => 'talaba@example.com']);
+        Mail::assertNothingSent();
 
-        $sentCode = null;
-        Mail::assertSent(VerificationCodeMail::class, function (VerificationCodeMail $mail) use (&$sentCode) {
-            $sentCode = $mail->code;
+        $regToken = session('pending_registration.telegram_token');
+        $this->assertNotEmpty($regToken);
 
-            return $mail->hasTo('talaba@example.com');
-        });
-
-        $this->assertNotNull($sentCode);
+        // Simulate Telegram bot verification & OTP issuance
+        $otpCode = '482910';
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['phone' => 'reg:talaba@example.com'],
+            ['token' => Hash::make($otpCode), 'attempts' => 0, 'created_at' => now()]
+        );
+        Cache::put('tg_verified:'.$regToken, [
+            'chat_id' => '777888999',
+            'code' => $otpCode,
+            'verified_at' => now()->toIso8601String(),
+        ], now()->addMinutes(45));
 
         $verifyResponse = $this->post(route('register.verify.store'), [
-            'code' => $sentCode,
+            'code' => $otpCode,
         ]);
 
         $verifyResponse->assertRedirect(route('courses.index'));
@@ -49,6 +57,7 @@ class PasswordResetTest extends TestCase
         $this->assertDatabaseHas('users', [
             'email' => 'talaba@example.com',
             'phone' => '+998901234567',
+            'telegram_chat_id' => '777888999',
         ]);
     }
 
