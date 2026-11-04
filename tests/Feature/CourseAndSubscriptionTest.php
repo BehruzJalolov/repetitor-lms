@@ -450,8 +450,31 @@ class CourseAndSubscriptionTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $student = User::factory()->create(['name' => 'Odobli Talaba']);
+        $course = Course::create([
+            'title' => 'Matematika Kursi',
+            'slug' => 'matematika-kursi',
+            'price' => 150000,
+            'is_active' => true,
+        ]);
 
-        // 1. Clean message is accepted
+        // Kurs sotib olmagan o'quvchi chat sahifasiga kira olmaydi va yoza olmaydi
+        $this->actingAs($student)
+            ->get(route('chat.index'))
+            ->assertRedirect(route('courses.index'));
+
+        $this->actingAs($student)
+            ->postJson(route('chat.store'), ['message' => 'Salom'])
+            ->assertForbidden();
+
+        Subscription::create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'price' => $course->price,
+            'receipt_image' => 'receipts/test.jpg',
+            'status' => 'approved',
+        ]);
+
+        // 1. Clean message is accepted once student has an approved subscription
         $this->actingAs($student)->post(route('chat.store'), [
             'message' => 'Assalomu alaykum! 3-misoldagi logarifm qanday ishlanadi?',
         ])->assertRedirect();
@@ -524,6 +547,12 @@ class CourseAndSubscriptionTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $student = User::factory()->create();
+        $course = Course::create([
+            'title' => 'Jonli Efir Kursi',
+            'slug' => 'jonli-efir-kursi',
+            'price' => 200000,
+            'is_active' => true,
+        ]);
 
         $this->actingAs($admin)->post(route('admin.streams.store'), [
             'title' => 'DTM Matematika Jonli Tahlil',
@@ -534,6 +563,23 @@ class CourseAndSubscriptionTest extends TestCase
         $stream = LiveStream::first();
         $this->assertNotNull($stream);
         $this->assertSame('live', $stream->status);
+
+        // Kurs sotib olmagan o'quvchi jonli efirlarga kira olmaydi
+        $this->actingAs($student)
+            ->get(route('streams.index'))
+            ->assertRedirect(route('courses.index'));
+
+        $this->actingAs($student)
+            ->get(route('streams.show', $stream))
+            ->assertRedirect(route('courses.index'));
+
+        Subscription::create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'price' => $course->price,
+            'receipt_image' => 'receipts/stream.jpg',
+            'status' => 'approved',
+        ]);
 
         $this->actingAs($student)
             ->get(route('streams.show', $stream))

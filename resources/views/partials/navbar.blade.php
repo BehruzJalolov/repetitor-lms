@@ -14,8 +14,10 @@
             <a href="{{ route('courses.index') }}" class="btn-ghost {{ request()->routeIs('courses.*') ? 'text-brand-600 bg-brand-50' : '' }}">Kurslar</a>
             <a href="{{ route('teachers.index') }}" class="btn-ghost {{ request()->routeIs('teachers.*') ? 'text-brand-600 bg-brand-50' : '' }}">Ustozlar</a>
             @auth
-                <a href="{{ route('streams.index') }}" class="btn-ghost {{ request()->routeIs('streams.*') ? 'text-red-600 bg-red-50' : 'text-red-600' }}">🔴 Jonli efir</a>
-                <a href="{{ route('chat.index') }}" class="btn-ghost {{ request()->routeIs('chat.*') ? 'text-brand-600 bg-brand-50' : '' }}">💬 Chat</a>
+                @if (auth()->user()->hasActiveSubscription())
+                    <a href="{{ route('streams.index') }}" class="btn-ghost {{ request()->routeIs('streams.*') ? 'text-red-600 bg-red-50' : 'text-red-600' }}">🔴 Jonli efir</a>
+                    <a href="{{ route('chat.index') }}" class="btn-ghost {{ request()->routeIs('chat.*') ? 'text-brand-600 bg-brand-50' : '' }}">💬 Chat</a>
+                @endif
                 <a href="{{ route('my-courses') }}" class="btn-ghost {{ request()->routeIs('my-courses') ? 'text-brand-600 bg-brand-50' : '' }}">Mening kurslarim</a>
             @else
                 <a href="{{ route('home') }}#qanday-ishlaydi" class="btn-ghost">Qanday ishlaydi?</a>
@@ -58,8 +60,10 @@
         <a href="{{ route('courses.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Kurslar</a>
         <a href="{{ route('teachers.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Ustozlar va natijalar</a>
         @auth
-            <a href="{{ route('streams.index') }}" class="block rounded-lg px-3 py-2.5 font-bold text-red-600 hover:bg-red-50">🔴 Jonli efirlar</a>
-            <a href="{{ route('chat.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">💬 O'quvchilar chati</a>
+            @if (auth()->user()->hasActiveSubscription())
+                <a href="{{ route('streams.index') }}" class="block rounded-lg px-3 py-2.5 font-bold text-red-600 hover:bg-red-50">🔴 Jonli efirlar</a>
+                <a href="{{ route('chat.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">💬 O'quvchilar chati</a>
+            @endif
             <a href="{{ route('my-courses') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Mening kurslarim</a>
             <a href="{{ route('profile.edit') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Profil sozlamalari</a>
         @endauth

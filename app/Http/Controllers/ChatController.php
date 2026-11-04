@@ -14,16 +14,30 @@ use Illuminate\View\View;
 
 class ChatController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $courses = Course::where('is_active', true)
-            ->orderBy('title')
-            ->get()
-            ->filter(fn (Course $course) => $user->hasAccessTo($course))
-            ->values();
+        if (! $user->hasActiveSubscription()) {
+            return redirect()->route('courses.index')
+                ->with('error', 'O\'quvchilar chati va muhokamalardan foydalanish uchun avval kurs sotib oling.');
+        }
+
+        $coursesQuery = Course::where('is_active', true)->orderBy('title');
+
+        if ($user->isSuperAdmin()) {
+            $courses = $coursesQuery->get();
+        } elseif ($user->isTeacher()) {
+            $courses = $coursesQuery->where('teacher_id', $user->teacher_id)->get();
+        } else {
+            $subscribedCourseIds = $user->subscriptions()
+                ->where('status', 'approved')
+                ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                ->pluck('course_id');
+
+            $courses = $coursesQuery->whereIn('id', $subscribedCourseIds)->get();
+        }
 
         $activeCourse = null;
 
@@ -33,7 +47,7 @@ class ChatController extends Controller
                 ->first();
 
             if ($requestedCourse) {
-                abort_unless($user->hasAccessTo($requestedCourse), 403);
+                abort_unless($courses->contains('id', $requestedCourse->id), 403);
                 $activeCourse = $requestedCourse;
             }
         }
@@ -65,9 +79,10 @@ class ChatController extends Controller
             $query->where('lesson_id', $lesson->id);
         } elseif ($request->filled('course_id')) {
             $course = Course::findOrFail((int) $request->query('course_id'));
-            abort_unless($user->hasAccessTo($course), 403);
+            abort_unless($user->hasActiveSubscription() && $user->hasAccessTo($course), 403);
             $query->where('course_id', $course->id);
         } else {
+            abort_unless($user->hasActiveSubscription(), 403);
             $query->whereNull('course_id');
         }
 
@@ -133,7 +148,9 @@ class ChatController extends Controller
             abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
         } elseif ($courseId) {
             $course = Course::findOrFail($courseId);
-            abort_unless($user->hasAccessTo($course), 403);
+            abort_unless($user->hasActiveSubscription() && $user->hasAccessTo($course), 403);
+        } else {
+            abort_unless($user->hasActiveSubscription(), 403);
         }
 
         if ($parentId) {

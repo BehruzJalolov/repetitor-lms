@@ -204,6 +204,22 @@ class User extends Authenticatable
             ->exists();
     }
 
+    /**
+     * Foydalanuvchi kamida bitta tasdiqlangan (faol) kurs obunasiga egami yoki Admin/Ustozmi?
+     * Jonli efir va Chat bo'limlari faqat kurs sotib olgan o'quvchilar hamda ustoz/adminlar uchun ochiq.
+     */
+    public function hasActiveSubscription(): bool
+    {
+        if ($this->isAdmin()) {
+            return true;
+        }
+
+        return $this->subscriptions()
+            ->where('status', 'approved')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->exists();
+    }
+
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
