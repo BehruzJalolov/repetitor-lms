@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AnnouncementController as AdminAnnouncementController;
 use App\Http\Controllers\Admin\CourseController as AdminCourseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LeadController as AdminLeadController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Admin\StreamController as AdminStreamController;
 use App\Http\Controllers\Admin\StudentController as AdminStudentController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\TeacherController as AdminTeacherController;
+use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -31,6 +33,8 @@ Route::get('/kurslar', [CourseController::class, 'index'])->name('courses.index'
 Route::get('/kurslar/{course:slug}', [CourseController::class, 'show'])->name('courses.show');
 Route::get('/ustozlar', [TeacherController::class, 'index'])->name('teachers.index');
 Route::get('/ustozlar/{teacher:slug}', [TeacherController::class, 'show'])->name('teachers.show');
+Route::get('/yangiliklar', [AnnouncementController::class, 'index'])->name('news.index');
+Route::get('/yangiliklar/{announcement:slug}', [AnnouncementController::class, 'show'])->name('news.show');
 Route::post('/murojaat', [LeadController::class, 'store'])->middleware('throttle:5,1,leads_store')->name('leads.store');
 
 // O'quvchi (tizimga kirgan foydalanuvchi)
@@ -103,6 +107,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::resource('teachers', AdminTeacherController::class);
     Route::post('teachers/{teacher}/results', [AdminTeacherController::class, 'storeResult'])->name('teachers.results.store');
     Route::delete('teachers/{teacher}/results/{result}', [AdminTeacherController::class, 'destroyResult'])->name('teachers.results.destroy');
+
+    Route::resource('announcements', AdminAnnouncementController::class)->except(['show']);
 
     Route::middleware('admin:manage_leads')->group(function () {
         Route::get('leads', [AdminLeadController::class, 'index'])->name('leads.index');

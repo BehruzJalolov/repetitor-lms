@@ -13,6 +13,7 @@
             <a href="{{ route('home') }}" class="btn-ghost {{ request()->routeIs('home') ? 'text-brand-600 bg-brand-50' : '' }}">Bosh sahifa</a>
             <a href="{{ route('courses.index') }}" class="btn-ghost {{ request()->routeIs('courses.*') ? 'text-brand-600 bg-brand-50' : '' }}">Kurslar</a>
             <a href="{{ route('teachers.index') }}" class="btn-ghost {{ request()->routeIs('teachers.*') ? 'text-brand-600 bg-brand-50' : '' }}">Ustozlar</a>
+            <a href="{{ route('news.index') }}" class="btn-ghost {{ request()->routeIs('news.*') ? 'text-brand-600 bg-brand-50' : '' }}">📰 Yangiliklar</a>
             @auth
                 @if (auth()->user()->hasActiveSubscription())
                     <a href="{{ route('streams.index') }}" class="btn-ghost {{ request()->routeIs('streams.*') ? 'text-red-600 bg-red-50' : 'text-red-600' }}">🔴 Jonli efir</a>
@@ -64,6 +65,7 @@
         <a href="{{ route('home') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Bosh sahifa</a>
         <a href="{{ route('courses.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Kurslar</a>
         <a href="{{ route('teachers.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Ustozlar va natijalar</a>
+        <a href="{{ route('news.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">📰 Yangiliklar</a>
         @auth
             @if (auth()->user()->hasActiveSubscription())
                 <a href="{{ route('streams.index') }}" class="block rounded-lg px-3 py-2.5 font-bold text-red-600 hover:bg-red-50">🔴 Jonli efirlar</a>

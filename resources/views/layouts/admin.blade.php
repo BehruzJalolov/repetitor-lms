@@ -17,6 +17,7 @@
     $nav = [
         ['admin.dashboard', 'Bosh panel', 'M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10', 'admin.dashboard', true],
         ['admin.courses.index', 'Kurslar va darslar', 'M4 6h16M4 12h16M4 18h10', 'admin.courses.*', $currentUser->hasPermission('manage_courses')],
+        ['admin.announcements.index', 'Yangiliklar va e\'lonlar', 'M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z', 'admin.announcements.*', true],
         ['admin.streams.index', 'Jonli efirlar (Stream)', 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z', 'admin.streams.*', $currentUser->hasPermission('manage_streams')],
         ['admin.teachers.index', $currentUser->isSuperAdmin() ? 'Ustozlar va ruxsatlar' : 'Mening profilim va natijalarim', 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z', 'admin.teachers.*', $currentUser->isSuperAdmin() || ($currentUser->hasPermission('manage_results') && $currentUser->teacher_id)],
         ['admin.subscriptions.index', 'To\'lov cheklari', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', 'admin.subscriptions.*', $currentUser->hasPermission('manage_subscriptions')],

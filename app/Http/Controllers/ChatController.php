@@ -234,23 +234,40 @@ class ChatController extends Controller
         }
 
         $data = $request->validate([
-            'message' => ['required', 'string', 'min:1', 'max:1000'],
+            'message' => ['nullable', 'string', 'max:1000'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
             'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
             'course_id' => ['nullable', 'integer', 'exists:courses,id'],
             'lesson_id' => ['nullable', 'integer', 'exists:lessons,id'],
             'parent_id' => ['nullable', 'integer', 'exists:chat_messages,id'],
         ], [
-            'message.required' => 'Xabar matnini kiriting.',
             'message.max' => 'Xabar 1000 ta belgidan oshmasligi kerak.',
+            'image.image' => 'Yuklangan fayl rasm formatida bo\'lishi kerak.',
+            'image.max' => 'Rasm hajmi 5 MB dan oshmasligi kerak.',
         ]);
 
-        $text = trim($data['message']);
-        $filterError = ProfanityFilter::validateMessage($text, $user->isAdmin());
+        $hasImage = $request->hasFile('image');
+        if ($hasImage) {
+            abort_unless($user->isAdmin(), 403, 'Chatga faqat ustoz va admin rasm yubora oladi.');
+        }
 
-        if ($filterError !== null) {
+        $text = trim((string) ($data['message'] ?? ''));
+        if ($text === '' && ! $hasImage) {
+            $err = 'Xabar matnini kiriting yoki rasm tanlang.';
+
             return $request->expectsJson()
-                ? response()->json(['message' => $filterError], 422)
-                : back()->withInput()->with('error', $filterError);
+                ? response()->json(['message' => $err], 422)
+                : back()->withErrors(['message' => $err]);
+        }
+
+        if ($text !== '') {
+            $filterError = ProfanityFilter::validateMessage($text, $user->isAdmin());
+
+            if ($filterError !== null) {
+                return $request->expectsJson()
+                    ? response()->json(['message' => $filterError], 422)
+                    : back()->withInput()->with('error', $filterError);
+            }
         }
 
         $recipientId = $data['recipient_id'] ?? null;
@@ -291,13 +308,16 @@ class ChatController extends Controller
             }
         }
 
+        $imagePath = $hasImage ? $request->file('image')->store('chat-images', 'public') : null;
+
         $msg = ChatMessage::create([
             'user_id' => $user->id,
             'recipient_id' => $recipient?->id,
             'course_id' => $courseId,
             'lesson_id' => $lessonId,
             'parent_id' => $parentId,
-            'message' => $text,
+            'message' => $text !== '' ? $text : '📷 Rasm',
+            'image_path' => $imagePath,
         ]);
 
         $msg->load(['user:id,name,role,is_chat_banned', 'recipient:id,name', 'parent.user:id,name', 'lesson:id,title']);
@@ -342,6 +362,8 @@ class ChatController extends Controller
             'is_admin' => (bool) $m->user?->isAdmin(),
             'is_banned' => (bool) $m->user?->is_chat_banned,
             'message' => $m->message,
+            'image_url' => $m->image_url,
+            'links' => $m->user?->isAdmin() ? self::extractLinks((string) $m->message) : [],
             'is_pinned' => (bool) $m->is_pinned,
             'parent_id' => $m->parent_id,
             'parent_user' => $m->parent?->user?->name ?? 'O\'quvchi',
@@ -356,6 +378,32 @@ class ChatController extends Controller
             'ban_url' => $m->user ? route('chat.ban', $m->user) : null,
             'delete_url' => route('chat.destroy', $m),
         ];
+    }
+
+    /**
+     * Ustoz/Admin xabari ichidagi URL yoki t.me havolalarni ajratib oladi.
+     *
+     * @return list<array{url: string, label: string}>
+     */
+    private static function extractLinks(string $text): array
+    {
+        if ($text === '') {
+            return [];
+        }
+
+        preg_match_all('~(?:https?://|t\.me/)[^\s<>"\']+~iu', $text, $matches);
+        $links = [];
+
+        foreach (array_unique($matches[0] ?? []) as $raw) {
+            $clean = rtrim($raw, '.,;:!?)');
+            $href = str_starts_with(strtolower($clean), 'http') ? $clean : 'https://'.$clean;
+            $links[] = [
+                'url' => $href,
+                'label' => Str::limit(preg_replace('~^https?://~i', '', $clean) ?? $clean, 40),
+            ];
+        }
+
+        return $links;
     }
 
     private function markChatSeen(User $user): void

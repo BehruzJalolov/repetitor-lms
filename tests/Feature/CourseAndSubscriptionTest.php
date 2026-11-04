@@ -1045,4 +1045,70 @@ class CourseAndSubscriptionTest extends TestCase
             ->assertOk()
             ->assertJsonFragment(['message' => 'Vali, 5-masalani qanday yechding?']);
     }
+
+    public function test_admin_and_teachers_can_post_images_and_links_in_chat_and_publish_news(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create();
+        $student = User::factory()->create();
+        $course = Course::create([
+            'title' => 'Test Kurs',
+            'slug' => 'test-kurs',
+            'price' => 100000,
+            'is_active' => true,
+        ]);
+
+        Subscription::create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'price' => $course->price,
+            'receipt_image' => 'receipts/ok.jpg',
+            'status' => 'approved',
+        ]);
+
+        // 1. Student cannot upload an image to chat
+        $this->actingAs($student)
+            ->postJson(route('chat.store'), [
+                'message' => 'Rasm',
+                'image' => UploadedFile::fake()->image('student.jpg'),
+            ])
+            ->assertForbidden();
+
+        // 2. Admin/Teacher CAN upload an image and post a promotional link in general chat
+        $adImage = UploadedFile::fake()->image('promo-banner.jpg');
+        $this->actingAs($admin)
+            ->postJson(route('chat.store'), [
+                'message' => 'Yangi guruhga chegirma! Batafsil: https://t.me/ITblockbehruz',
+                'image' => $adImage,
+            ])
+            ->assertOk()
+            ->assertJsonPath('chat_message.links.0.url', 'https://t.me/ITblockbehruz');
+
+        // 3. Admin publishes a News / Announcement with "share_to_chat" enabled
+        $newsBanner = UploadedFile::fake()->image('news.jpg');
+        $this->actingAs($admin)
+            ->post(route('admin.announcements.store'), [
+                'title' => 'Milliy Sertifikat yangi intensiv oqimi ochildi!',
+                'category' => 'chegirma',
+                'excerpt' => 'Birinchi 20 ta o\'quvchi uchun 30% chegirma.',
+                'body' => 'Darslar haftasiga 6 kun jonli va video formatda olib boriladi.',
+                'link_url' => 'https://t.me/ITblockbehruz',
+                'link_label' => 'Kanalga ulanish',
+                'image' => $newsBanner,
+                'is_active' => '1',
+                'is_pinned' => '1',
+                'share_to_chat' => '1',
+            ])
+            ->assertRedirect(route('admin.announcements.index'));
+
+        $this->get(route('news.index'))
+            ->assertOk()
+            ->assertSee('Milliy Sertifikat yangi intensiv oqimi ochildi!');
+
+        $this->assertDatabaseHas('chat_messages', [
+            'user_id' => $admin->id,
+            'is_pinned' => true,
+        ]);
+    }
 }

@@ -22,6 +22,7 @@
 <div x-data="{
         messages: @js($initialMessages),
         canModerate: @js($canModerate),
+        isAdmin: @js((bool) $user?->isAdmin()),
         courseId: @js($courseId),
         lessonId: @js($lessonId),
         recipientId: @js($recipientId),
@@ -29,6 +30,8 @@
         storeUrl: @js(route('chat.store')),
         csrf: @js(csrf_token()),
         newMessage: '',
+        imageFile: null,
+        imageName: '',
         sending: false,
         errorText: '',
         replyId: null,
@@ -43,6 +46,18 @@
             const box = this.$refs.scrollBox;
             if (box) {
                 box.scrollTop = box.scrollHeight;
+            }
+        },
+        onFileSelected(event) {
+            const file = event.target.files?.[0] || null;
+            this.imageFile = file;
+            this.imageName = file ? file.name : '';
+        },
+        clearImage() {
+            this.imageFile = null;
+            this.imageName = '';
+            if (this.$refs.imageInput) {
+                this.$refs.imageInput.value = '';
             }
         },
         async fetchMessages() {
@@ -65,32 +80,34 @@
         },
         async submitMessage() {
             const text = this.newMessage.trim();
-            if (!text || this.sending) return;
+            if ((!text && !this.imageFile) || this.sending) return;
             this.sending = true;
             this.errorText = '';
             try {
+                const formData = new FormData();
+                formData.append('message', text);
+                if (this.recipientId) formData.append('recipient_id', this.recipientId);
+                if (this.courseId) formData.append('course_id', this.courseId);
+                if (this.lessonId) formData.append('lesson_id', this.lessonId);
+                if (this.replyId) formData.append('parent_id', this.replyId);
+                if (this.imageFile) formData.append('image', this.imageFile);
+
                 const res = await fetch(this.storeUrl, {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
-                        'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': this.csrf,
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: JSON.stringify({
-                        message: text,
-                        recipient_id: this.recipientId,
-                        course_id: this.courseId,
-                        lesson_id: this.lessonId,
-                        parent_id: this.replyId
-                    })
+                    body: formData
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    this.errorText = data.message || (data.errors?.message ? data.errors.message[0] : 'Xabar yuborishda xatolik yuz berdi.');
+                    this.errorText = data.message || (data.errors?.message ? data.errors.message[0] : (data.errors?.image ? data.errors.image[0] : 'Xabar yuborishda xatolik yuz berdi.'));
                 } else {
                     this.newMessage = '';
                     this.clearReply();
+                    this.clearImage();
                     if (data.chat_message) {
                         this.messages.push(data.chat_message);
                         this.$nextTick(() => this.scrollToBottom());
@@ -194,7 +211,28 @@
                             </div>
                         </template>
 
+                        <template x-if="m.image_url">
+                            <a :href="m.image_url" target="_blank" rel="noopener" class="mb-2 block overflow-hidden rounded-xl border border-black/10">
+                                <img :src="m.image_url" alt="Chat rasmi" class="max-h-64 w-full object-cover transition hover:opacity-95">
+                            </a>
+                        </template>
+
                         <p class="whitespace-pre-line break-words" x-text="m.message"></p>
+
+                        <template x-if="m.links && m.links.length > 0">
+                            <div class="mt-2 flex flex-wrap gap-1.5 border-t border-amber-200/70 pt-2">
+                                <template x-for="lnk in m.links" :key="lnk.url">
+                                    <a :href="lnk.url"
+                                       target="_blank"
+                                       rel="noopener"
+                                       class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition hover:bg-brand-700">
+                                        <span>🔗</span>
+                                        <span x-text="lnk.label"></span>
+                                        <span>↗</span>
+                                    </a>
+                                </template>
+                            </div>
+                        </template>
                     </div>
 
                     {{-- Amallar: Javob berish, Shaxsiyga yozish, Pin, O'chirish, Bloklash --}}
@@ -267,7 +305,12 @@
                 <button type="button" @click="clearReply()" class="shrink-0 font-bold text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
-            <form method="POST" action="{{ route('chat.store') }}" @submit.prevent="submitMessage()" class="flex items-end gap-2.5">
+            <div x-show="imageName" x-cloak class="mb-2.5 flex items-center justify-between gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                <span class="truncate" x-text="'📷 Tanlangan rasm: ' + imageName"></span>
+                <button type="button" @click="clearImage()" class="shrink-0 font-bold text-amber-600 hover:text-amber-900">✕ Olib tashlash</button>
+            </div>
+
+            <form method="POST" action="{{ route('chat.store') }}" enctype="multipart/form-data" @submit.prevent="submitMessage()" class="flex items-end gap-2">
                 @csrf
                 @if ($recipientId)
                     <input type="hidden" name="recipient_id" value="{{ $recipientId }}">
@@ -280,15 +323,27 @@
                 @endif
                 <input type="hidden" name="parent_id" :value="replyId || ''">
 
+                @if ($user?->isAdmin())
+                    <label class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-lg text-slate-600 shadow-2xs transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-600"
+                           title="Rasm biriktirish (Reklama / E'lon uchun)">
+                        📷
+                        <input x-ref="imageInput"
+                               type="file"
+                               name="image"
+                               accept="image/jpeg,image/png,image/webp,image/gif"
+                               @change="onFileSelected($event)"
+                               class="hidden">
+                    </label>
+                @endif
+
                 <div class="min-w-0 flex-1">
                     <input x-ref="chatInput"
                            x-model="newMessage"
                            name="message"
                            type="text"
                            maxlength="1000"
-                           placeholder="Dars bo'yicha savol yoki fikringizni yozing..."
-                           class="input !py-2.5 text-sm"
-                           required>
+                           placeholder="{{ $user?->isAdmin() ? 'E\'lon, ssilka (https://...) yoki xabar yozing...' : 'Dars bo\'yicha savol yoki fikringizni yozing...' }}"
+                           class="input !py-2.5 text-sm">
                 </div>
                 <button type="submit"
                         id="send-chat-message"
