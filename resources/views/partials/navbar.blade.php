@@ -16,7 +16,12 @@
             @auth
                 @if (auth()->user()->hasActiveSubscription())
                     <a href="{{ route('streams.index') }}" class="btn-ghost {{ request()->routeIs('streams.*') ? 'text-red-600 bg-red-50' : 'text-red-600' }}">🔴 Jonli efir</a>
-                    <a href="{{ route('chat.index') }}" class="btn-ghost {{ request()->routeIs('chat.*') ? 'text-brand-600 bg-brand-50' : '' }}">💬 Chat</a>
+                    <a href="{{ route('chat.index') }}" class="btn-ghost {{ request()->routeIs('chat.*') ? 'text-brand-600 bg-brand-50' : '' }}">
+                        <span>💬 Chat</span>
+                        @if (($unreadChatCount ?? 0) > 0)
+                            <span class="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white">{{ $unreadChatCount }}</span>
+                        @endif
+                    </a>
                 @endif
                 <a href="{{ route('my-courses') }}" class="btn-ghost {{ request()->routeIs('my-courses') ? 'text-brand-600 bg-brand-50' : '' }}">Mening kurslarim</a>
             @else

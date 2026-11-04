@@ -6,10 +6,13 @@ use App\Models\ChatMessage;
 use App\Models\Course;
 use App\Models\Lesson;
 use App\Models\User;
+use App\Services\TelegramNotificationService;
 use App\Support\ProfanityFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class ChatController extends Controller
@@ -63,6 +66,8 @@ class ChatController extends Controller
         $pinnedMessages = (clone $query)->where('is_pinned', true)->latest()->limit(3)->get();
         $messages = $query->latest()->limit(80)->get()->reverse()->values();
 
+        $this->markChatSeen($user);
+
         return view('pages.chat', compact('courses', 'activeCourse', 'messages', 'pinnedMessages'));
     }
 
@@ -86,27 +91,15 @@ class ChatController extends Controller
             $query->whereNull('course_id');
         }
 
-        $messages = $query->latest()->limit(80)->get()->reverse()->values()->map(fn (ChatMessage $m) => [
-            'id' => $m->id,
-            'user_id' => $m->user_id,
-            'user_name' => $m->user?->name ?? 'O\'quvchi',
-            'user_initial' => mb_strtoupper(mb_substr($m->user?->name ?? 'O', 0, 1)),
-            'is_admin' => (bool) $m->user?->isAdmin(),
-            'is_banned' => (bool) $m->user?->is_chat_banned,
-            'message' => $m->message,
-            'is_pinned' => $m->is_pinned,
-            'parent_id' => $m->parent_id,
-            'parent_user' => $m->parent?->user?->name,
-            'parent_excerpt' => $m->parent ? mb_substr($m->parent->message, 0, 70) : null,
-            'lesson_title' => $m->lesson?->title,
-            'time' => $m->created_at->format('H:i'),
-            'date' => $m->created_at->format('d.m'),
-        ]);
+        $messages = $query->latest()->limit(80)->get()->reverse()->values()
+            ->map(fn (ChatMessage $m) => self::formatMessage($m, $user));
+
+        $this->markChatSeen($user);
 
         return response()->json(['messages' => $messages]);
     }
 
-    public function store(Request $request): JsonResponse|RedirectResponse
+    public function store(Request $request, TelegramNotificationService $telegram): JsonResponse|RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -141,22 +134,27 @@ class ChatController extends Controller
         $courseId = $data['course_id'] ?? null;
         $lessonId = $data['lesson_id'] ?? null;
         $parentId = $data['parent_id'] ?? null;
+        $course = null;
+        $lesson = null;
 
         if ($lessonId) {
-            $lesson = Lesson::with('course')->findOrFail($lessonId);
+            $lesson = Lesson::with('course.teacher.account')->findOrFail($lessonId);
+            $course = $lesson->course;
             $courseId = $lesson->course_id;
             abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
         } elseif ($courseId) {
-            $course = Course::findOrFail($courseId);
+            $course = Course::with('teacher.account')->findOrFail($courseId);
             abort_unless($user->hasActiveSubscription() && $user->hasAccessTo($course), 403);
         } else {
             abort_unless($user->hasActiveSubscription(), 403);
         }
 
+        $parent = null;
         if ($parentId) {
-            $parent = ChatMessage::findOrFail($parentId);
+            $parent = ChatMessage::with('user')->findOrFail($parentId);
             if ($parent->course_id !== $courseId) {
                 $parentId = null;
+                $parent = null;
             }
         }
 
@@ -168,14 +166,102 @@ class ChatController extends Controller
             'message' => $text,
         ]);
 
+        $msg->load(['user:id,name,role,is_chat_banned', 'parent.user:id,name', 'lesson:id,title']);
+        $this->markChatSeen($user);
+        $this->sendChatNotifications($telegram, $msg, $user, $course, $lesson, $parent);
+
         if ($request->expectsJson()) {
             return response()->json([
                 'ok' => true,
                 'id' => $msg->id,
+                'chat_message' => self::formatMessage($msg, $user),
             ]);
         }
 
         return back()->with('success', 'Xabar yuborildi.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function formatMessage(ChatMessage $m, ?User $viewer = null): array
+    {
+        return [
+            'id' => $m->id,
+            'user_id' => $m->user_id,
+            'is_mine' => $viewer !== null && $m->user_id === $viewer->id,
+            'user_name' => $m->user?->name ?? 'O\'quvchi',
+            'user_initial' => mb_strtoupper(mb_substr($m->user?->name ?? 'O', 0, 1)),
+            'is_admin' => (bool) $m->user?->isAdmin(),
+            'is_banned' => (bool) $m->user?->is_chat_banned,
+            'message' => $m->message,
+            'is_pinned' => (bool) $m->is_pinned,
+            'parent_id' => $m->parent_id,
+            'parent_user' => $m->parent?->user?->name ?? 'O\'quvchi',
+            'parent_excerpt' => $m->parent ? Str::limit($m->parent->message, 80) : null,
+            'lesson_title' => $m->lesson?->title,
+            'time' => $m->created_at->format('H:i'),
+            'date' => $m->created_at->format('d.m'),
+            'can_delete' => $viewer !== null && ($viewer->hasPermission('moderate_chat') || $m->user_id === $viewer->id),
+            'pin_url' => route('chat.pin', $m),
+            'ban_url' => $m->user ? route('chat.ban', $m->user) : null,
+            'delete_url' => route('chat.destroy', $m),
+        ];
+    }
+
+    private function markChatSeen(User $user): void
+    {
+        $latestId = (int) ChatMessage::max('id');
+        Cache::forever('chat_last_seen_id:'.$user->id, $latestId);
+    }
+
+    private function sendChatNotifications(
+        TelegramNotificationService $telegram,
+        ChatMessage $msg,
+        User $sender,
+        ?Course $course,
+        ?Lesson $lesson,
+        ?ChatMessage $parent
+    ): void {
+        $roomLabel = $lesson
+            ? "{$course?->title} — {$lesson->title}"
+            : ($course ? $course->title : 'Umumiy savol-javob');
+
+        $chatUrl = $course
+            ? route('chat.index', ['course' => $course->slug])
+            : route('chat.index');
+
+        // 1. Agar javob yozilgan bo'lsa va javob egasi Telegram ulangan bo'lsa, unga shaxsiy bildirishnoma yuboramiz
+        if ($parent && $parent->user && $parent->user_id !== $sender->id && $parent->user->telegram_chat_id) {
+            $senderTitle = $sender->isAdmin() ? "👨‍🏫 Ustoz ({$sender->name})" : "👤 {$sender->name}";
+            $telegram->sendToChat(
+                (string) $parent->user->telegram_chat_id,
+                "💬 <b>Sizning xabaringizga javob yozildi!</b>\n\n"
+                ."{$senderTitle}:\n"
+                .'<i>«'.e(Str::limit($msg->message, 200))."»</i>\n\n"
+                .'📚 <b>Guruh:</b> '.e((string) $roomLabel),
+                [[['text' => '💬 Chatni ochish va javob berish', 'url' => $chatUrl]]]
+            );
+        }
+
+        // 2. Agar o'quvchi yozgan bo'lsa, ustozga va adminga Telegram orqali darhol xabar yuboramiz
+        if (! $sender->isAdmin()) {
+            $notifText = "💬 <b>Chatda yangi xabar!</b>\n\n"
+                .'👤 <b>O\'quvchi:</b> '.e($sender->name)."\n"
+                .'📚 <b>Guruh:</b> '.e((string) $roomLabel)."\n"
+                .'✉️ <b>Xabar:</b> '.e(Str::limit($msg->message, 250));
+
+            $teacherChatId = $course?->teacher?->account?->telegram_chat_id;
+            if ($teacherChatId) {
+                $telegram->sendToChat(
+                    (string) $teacherChatId,
+                    $notifText,
+                    [[['text' => '↩️ Chatga kirib javob yozish', 'url' => $chatUrl]]]
+                );
+            }
+
+            $telegram->send($notifText);
+        }
     }
 
     public function destroy(Request $request, ChatMessage $chatMessage): JsonResponse|RedirectResponse

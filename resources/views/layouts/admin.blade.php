@@ -53,7 +53,12 @@
         @endforeach
     </nav>
     <div class="space-y-1 border-t border-white/10 p-3">
-        <a href="{{ route('chat.index') }}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-white/5 hover:text-white">💬 O'quvchilar chati</a>
+        <a href="{{ route('chat.index') }}" class="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-white/5 hover:text-white">
+            <span>💬 O'quvchilar chati</span>
+            @if (($unreadChatCount ?? 0) > 0)
+                <span class="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white animate-pulse">{{ $unreadChatCount }}</span>
+            @endif
+        </a>
         <a href="{{ route('home') }}" target="_blank" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-white/5 hover:text-white">↗ Saytni ko'rish</a>
         <form method="POST" action="{{ route('logout') }}">@csrf
             <button type="submit" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/10">⏻ Chiqish</button>
