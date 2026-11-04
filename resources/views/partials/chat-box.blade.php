@@ -1,6 +1,10 @@
 @php
     $courseId = $courseId ?? null;
     $lessonId = $lessonId ?? null;
+    $recipientId = $recipientId ?? null;
+    $spyU1 = $spyU1 ?? null;
+    $spyU2 = $spyU2 ?? null;
+    $readOnly = (bool) ($readOnly ?? false);
     $heightClass = $heightClass ?? 'h-[420px]';
     $user = auth()->user();
     $canModerate = (bool) $user?->hasPermission('moderate_chat');
@@ -8,6 +12,9 @@
     $pollParams = array_filter([
         'course_id' => $courseId,
         'lesson_id' => $lessonId,
+        'recipient_id' => $recipientId,
+        'spy_u1' => $spyU1,
+        'spy_u2' => $spyU2,
     ], fn ($v) => $v !== null);
     $pollUrl = route('chat.messages', $pollParams);
 @endphp
@@ -17,6 +24,7 @@
         canModerate: @js($canModerate),
         courseId: @js($courseId),
         lessonId: @js($lessonId),
+        recipientId: @js($recipientId),
         pollUrl: @js($pollUrl),
         storeUrl: @js(route('chat.store')),
         csrf: @js(csrf_token()),
@@ -71,6 +79,7 @@
                     },
                     body: JSON.stringify({
                         message: text,
+                        recipient_id: this.recipientId,
                         course_id: this.courseId,
                         lesson_id: this.lessonId,
                         parent_id: this.replyId
@@ -188,13 +197,21 @@
                         <p class="whitespace-pre-line break-words" x-text="m.message"></p>
                     </div>
 
-                    {{-- Amallar: Javob berish, Pin, O'chirish, Bloklash --}}
+                    {{-- Amallar: Javob berish, Shaxsiyga yozish, Pin, O'chirish, Bloklash --}}
                     <div class="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-400" :class="m.is_mine ? 'justify-end' : ''">
-                        <button type="button"
-                                @click="setReply(m.id, m.user_name, m.message)"
-                                class="font-semibold hover:text-brand-600">
-                            ↩️ Javob berish
-                        </button>
+                        @unless ($readOnly)
+                            <button type="button"
+                                    @click="setReply(m.id, m.user_name, m.message)"
+                                    class="font-semibold hover:text-brand-600">
+                                ↩️ Javob berish
+                            </button>
+                        @endunless
+
+                        <template x-if="m.can_dm && m.dm_url">
+                            <a :href="m.dm_url" class="font-semibold text-indigo-600 hover:underline">
+                                ✉️ Shaxsiyga yozish
+                            </a>
+                        </template>
 
                         <template x-if="canModerate">
                             <form method="POST" :action="m.pin_url" class="inline">
@@ -228,7 +245,11 @@
 
     {{-- Xabar yozish formasi --}}
     <div class="border-t border-slate-100 bg-slate-50 p-3.5 sm:p-4">
-        @if ($user?->is_chat_banned && ! $user->isAdmin())
+        @if ($readOnly)
+            <div class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-center text-xs font-bold text-indigo-800">
+                🕵️‍♂️ Maxfiy kuzatuv rejimi — ushbu 1-1 yozishmani kuzatayotganingiz o'quvchilarga ham, ustozlarga ham ko'rinmaydi.
+            </div>
+        @elseif ($user?->is_chat_banned && ! $user->isAdmin())
             <div class="rounded-xl bg-red-50 px-4 py-3 text-center text-xs font-bold text-red-700">
                 🔇 Siz chat qoidalarini buzganingiz sababli ustoz tomonidan yozishdan cheklangansiz.
             </div>
@@ -248,6 +269,9 @@
 
             <form method="POST" action="{{ route('chat.store') }}" @submit.prevent="submitMessage()" class="flex items-end gap-2.5">
                 @csrf
+                @if ($recipientId)
+                    <input type="hidden" name="recipient_id" value="{{ $recipientId }}">
+                @endif
                 @if ($courseId)
                     <input type="hidden" name="course_id" value="{{ $courseId }}">
                 @endif

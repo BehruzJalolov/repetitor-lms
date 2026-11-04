@@ -50,6 +50,7 @@ class AppServiceProvider extends ServiceProvider
                 $lastSeenId = (int) Cache::get('chat_last_seen_id:'.$user->id, 0);
                 $unreadChatCount = ChatMessage::where('id', '>', $lastSeenId)
                     ->where('user_id', '!=', $user->id)
+                    ->whereNull('recipient_id')
                     ->when($isTeacher, fn ($q) => $q->where(function ($sub) use ($user) {
                         $sub->whereNull('course_id')
                             ->orWhereHas('course', fn ($cq) => $cq->where('teacher_id', $user->teacher_id));
@@ -72,15 +73,19 @@ class AppServiceProvider extends ServiceProvider
                 $lastSeenId = (int) Cache::get('chat_last_seen_id:'.$user->id, 0);
                 $unreadChatCount = ChatMessage::where('id', '>', $lastSeenId)
                     ->where('user_id', '!=', $user->id)
+                    ->when($user->isTeacher(), fn ($q) => $q->whereNull('recipient_id'))
                     ->when(! $user->isAdmin(), function ($q) use ($user) {
                         $subscribedCourseIds = $user->subscriptions()
                             ->where('status', 'approved')
                             ->where(fn ($sq) => $sq->whereNull('expires_at')->orWhere('expires_at', '>', now()))
                             ->pluck('course_id');
 
-                        $q->where(function ($sub) use ($subscribedCourseIds) {
-                            $sub->whereNull('course_id')
-                                ->orWhereIn('course_id', $subscribedCourseIds);
+                        $q->where(function ($sub) use ($user, $subscribedCourseIds) {
+                            $sub->where('recipient_id', $user->id)
+                                ->orWhere(function ($pub) use ($subscribedCourseIds) {
+                                    $pub->whereNull('recipient_id')
+                                        ->where(fn ($c) => $c->whereNull('course_id')->orWhereIn('course_id', $subscribedCourseIds));
+                                });
                         });
                     })
                     ->count();

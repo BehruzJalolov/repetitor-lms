@@ -40,7 +40,73 @@
 
     <div class="grid gap-6 lg:grid-cols-3">
         {{-- CHAP TOMON: JONLI VIDEO EFIR XONASI --}}
-        <div class="lg:col-span-2">
+        <div class="lg:col-span-2"
+             x-data="{
+                 localCamOpen: false,
+                 camError: '',
+                 mediaStream: null,
+                 async toggleLocalCamera() {
+                     this.camError = '';
+                     if (this.localCamOpen) {
+                         this.stopLocalCamera();
+                         return;
+                     }
+                     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                         this.camError = 'Brauzeringiz kamera/mikrofonni qo\'llab-quvvatlamaydi yoki HTTPS ulanish talab qilinadi.';
+                         return;
+                     }
+                     try {
+                         this.mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                         this.localCamOpen = true;
+                         this.$nextTick(() => {
+                             if (this.$refs.localVideo) {
+                                 this.$refs.localVideo.srcObject = this.mediaStream;
+                             }
+                         });
+                     } catch (err) {
+                         this.camError = 'Kamera yoki mikrofonga ruxsat berilmadi. Brauzer manzil satri yonidagi 🔒 belgisidan Kamera va Mikrofonga «Ruxsat berish (Allow)» ni yoqing.';
+                     }
+                 },
+                 stopLocalCamera() {
+                     if (this.mediaStream) {
+                         this.mediaStream.getTracks().forEach(t => t.stop());
+                         this.mediaStream = null;
+                     }
+                     this.localCamOpen = false;
+                 }
+             }">
+
+            @if ($stream->status !== 'ended' && $stream->stream_type !== 'youtube')
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-2xs">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button"
+                                @click="toggleLocalCamera()"
+                                :class="localCamOpen ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-brand-600 text-white hover:bg-brand-700'"
+                                class="btn !px-3.5 !py-2 text-xs font-bold">
+                            <span x-text="localCamOpen ? '⏹ Kamerani o\'chirish' : '🎥 Kamera va mikrofonni yoqish'">🎥 Kamera va mikrofonni yoqish</span>
+                        </button>
+                        <span class="text-xs text-slate-500">Brauzerda kamera/mikrofon ruxsatini faollashtirish</span>
+                    </div>
+
+                    <a href="https://meet.jit.si/{{ $stream->room_code }}#userInfo.displayName=%22{{ rawurlencode(auth()->user()->name.($stream->teacher && auth()->user()->isAdmin() ? ' (Ustoz)' : '')) }}%22&config.prejoinPageEnabled=false&config.disableDeepLinking=true"
+                       target="_blank"
+                       rel="noopener"
+                       class="btn border border-slate-200 bg-slate-50 !px-3.5 !py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                        ↗ Alohida oynada ochish
+                    </a>
+                </div>
+
+                <div x-show="camError" x-cloak class="mb-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700" x-text="camError"></div>
+
+                <div x-show="localCamOpen" x-cloak class="mb-4 overflow-hidden rounded-2xl border-2 border-emerald-500 bg-slate-950 p-2 shadow-lg">
+                    <div class="mb-1.5 flex items-center justify-between px-2 text-xs font-bold text-emerald-400">
+                        <span>🟢 Sizning kamerangiz va mikrofoningiz faol holatda</span>
+                        <button type="button" @click="stopLocalCamera()" class="text-slate-400 hover:text-white">✕ Yopish</button>
+                    </div>
+                    <video x-ref="localVideo" autoplay playsinline muted class="aspect-video max-h-64 w-full rounded-xl bg-black object-cover"></video>
+                </div>
+            @endif
+
             <div class="relative aspect-video overflow-hidden rounded-2xl bg-slate-900 shadow-2xl sm:rounded-3xl" oncontextmenu="return false;">
                 @if ($stream->status === 'ended')
                     <div class="flex h-full flex-col items-center justify-center p-6 text-center text-white">
@@ -57,8 +123,8 @@
                 @else
                     {{-- Ichki Video Konferensiya (Jitsi WebRTC: Kamera, Mikrofon, Doska / Ekran ulashish) --}}
                     <iframe class="h-full w-full"
-                            src="https://meet.jit.si/{{ $stream->room_code }}#userInfo.displayName=%22{{ rawurlencode(auth()->user()->name.($stream->teacher && auth()->user()->isAdmin() ? ' (Ustoz)' : '')) }}%22&config.prejoinPageEnabled=false&config.disableDeepLinking=true"
-                            allow="camera; microphone; fullscreen; display-capture; autoplay"
+                            src="https://meet.jit.si/{{ $stream->room_code }}#userInfo.displayName=%22{{ rawurlencode(auth()->user()->name.($stream->teacher && auth()->user()->isAdmin() ? ' (Ustoz)' : '')) }}%22&config.prejoinPageEnabled=false&config.disableDeepLinking=true&config.startWithAudioMuted=false&config.startWithVideoMuted=false"
+                            allow="camera *; microphone *; display-capture *; fullscreen *; autoplay *; clipboard-write *; speaker-selection *"
                             allowfullscreen></iframe>
                 @endif
 

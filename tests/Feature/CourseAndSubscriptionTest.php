@@ -961,4 +961,88 @@ class CourseAndSubscriptionTest extends TestCase
             'telegram_chat_id' => '888999000',
         ]);
     }
+
+    public function test_students_can_message_one_on_one_privately_hidden_from_teachers_but_visible_to_super_admin(): void
+    {
+        $superAdmin = User::factory()->admin()->create();
+        $teacherProfile = Teacher::create([
+            'name' => 'Ustoz Karim',
+            'slug' => 'ustoz-karim',
+            'subject' => 'Fizika',
+            'experience_years' => 6,
+            'is_active' => true,
+        ]);
+        $teacherUser = User::factory()->create([
+            'name' => 'Ustoz Karim',
+            'role' => 'teacher',
+            'teacher_id' => $teacherProfile->id,
+            'permissions' => ['moderate_chat', 'manage_courses'],
+        ]);
+
+        $studentA = User::factory()->create(['name' => 'Ali Talaba']);
+        $studentB = User::factory()->create(['name' => 'Vali Talaba']);
+        $studentC = User::factory()->create(['name' => 'Gani Talaba']);
+
+        $course = Course::create([
+            'teacher_id' => $teacherProfile->id,
+            'title' => 'Fizika Kursi',
+            'slug' => 'fizika-kursi',
+            'price' => 200000,
+            'is_active' => true,
+        ]);
+
+        foreach ([$studentA, $studentB, $studentC] as $st) {
+            Subscription::create([
+                'user_id' => $st->id,
+                'course_id' => $course->id,
+                'price' => $course->price,
+                'receipt_image' => 'receipts/ok.jpg',
+                'status' => 'approved',
+            ]);
+        }
+
+        // 1. Student A sends a 1-1 private message to Student B
+        $this->actingAs($studentA)
+            ->postJson(route('chat.store'), [
+                'recipient_id' => $studentB->id,
+                'message' => 'Vali, 5-masalani qanday yechding?',
+            ])
+            ->assertOk();
+
+        // 2. The 1-1 message does NOT appear in general public chat
+        $this->actingAs($studentC)
+            ->getJson(route('chat.messages'))
+            ->assertOk()
+            ->assertJsonMissing(['message' => 'Vali, 5-masalani qanday yechding?']);
+
+        // 3. Student B sees the 1-1 message in their DM with Student A
+        $this->actingAs($studentB)
+            ->getJson(route('chat.messages', ['recipient_id' => $studentA->id]))
+            ->assertOk()
+            ->assertJsonFragment(['message' => 'Vali, 5-masalani qanday yechding?']);
+
+        // 4. Teacher CANNOT access 1-1 student DMs or Super Admin spy mode
+        $this->actingAs($teacherUser)
+            ->get(route('chat.index', ['dm' => $studentA->id]))
+            ->assertForbidden();
+
+        $this->actingAs($teacherUser)
+            ->getJson(route('chat.messages', ['recipient_id' => $studentA->id]))
+            ->assertForbidden();
+
+        $this->actingAs($teacherUser)
+            ->get(route('chat.index', ['spy_u1' => $studentA->id, 'spy_u2' => $studentB->id]))
+            ->assertForbidden();
+
+        // 5. Super Admin CAN silently monitor the 1-1 conversation between Student A and Student B
+        $this->actingAs($superAdmin)
+            ->get(route('chat.index', ['spy_u1' => $studentA->id, 'spy_u2' => $studentB->id]))
+            ->assertOk()
+            ->assertSee('Vali, 5-masalani qanday yechding?');
+
+        $this->actingAs($superAdmin)
+            ->getJson(route('chat.messages', ['spy_u1' => $studentA->id, 'spy_u2' => $studentB->id]))
+            ->assertOk()
+            ->assertJsonFragment(['message' => 'Vali, 5-masalani qanday yechding?']);
+    }
 }

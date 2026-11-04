@@ -43,8 +43,20 @@ class ChatController extends Controller
         }
 
         $activeCourse = null;
+        $dmPeer = null;
+        $spyPair = null;
 
-        if ($request->filled('course')) {
+        if ($request->filled('spy_u1') && $request->filled('spy_u2')) {
+            abort_unless($user->isSuperAdmin(), 403);
+            $u1 = User::findOrFail((int) $request->query('spy_u1'));
+            $u2 = User::findOrFail((int) $request->query('spy_u2'));
+            $spyPair = [$u1, $u2];
+        } elseif ($request->filled('dm')) {
+            abort_if($user->isTeacher(), 403);
+            $dmPeer = User::where('role', 'student')
+                ->where('id', '!=', $user->id)
+                ->findOrFail((int) $request->query('dm'));
+        } elseif ($request->filled('course')) {
             $requestedCourse = Course::where('is_active', true)
                 ->where('slug', (string) $request->query('course'))
                 ->first();
@@ -55,24 +67,104 @@ class ChatController extends Controller
             }
         }
 
-        $query = ChatMessage::with(['user:id,name,role,is_chat_banned', 'parent.user:id,name', 'lesson:id,title']);
+        $query = ChatMessage::with(['user:id,name,role,is_chat_banned', 'recipient:id,name', 'parent.user:id,name', 'lesson:id,title']);
 
-        if ($activeCourse) {
-            $query->where('course_id', $activeCourse->id);
+        if ($spyPair) {
+            [$u1, $u2] = $spyPair;
+            $query->where(function ($q) use ($u1, $u2) {
+                $q->where(fn ($sq) => $sq->where('user_id', $u1->id)->where('recipient_id', $u2->id))
+                    ->orWhere(fn ($sq) => $sq->where('user_id', $u2->id)->where('recipient_id', $u1->id));
+            });
+            $pinnedMessages = collect();
+        } elseif ($dmPeer) {
+            $query->where(function ($q) use ($user, $dmPeer) {
+                $q->where(fn ($sq) => $sq->where('user_id', $user->id)->where('recipient_id', $dmPeer->id))
+                    ->orWhere(fn ($sq) => $sq->where('user_id', $dmPeer->id)->where('recipient_id', $user->id));
+            });
+            $pinnedMessages = collect();
         } else {
-            $query->whereNull('course_id');
+            $query->whereNull('recipient_id');
+
+            if ($activeCourse) {
+                $query->where('course_id', $activeCourse->id);
+            } else {
+                $query->whereNull('course_id');
+            }
+
+            $pinnedMessages = (clone $query)->where('is_pinned', true)->latest()->limit(3)->get();
         }
 
-        $pinnedMessages = (clone $query)->where('is_pinned', true)->latest()->limit(3)->get();
         $messages = $query->latest()->limit(80)->get()->reverse()->values();
+
+        // O'quvchilar uchun 1-1 shaxsiy yozishma ("Lichka") kontaktlari (Ustozlarga ko'rinmaydi)
+        $dmContacts = collect();
+        if (! $user->isAdmin()) {
+            $dmContacts = User::where('role', 'student')
+                ->where('id', '!=', $user->id)
+                ->where(function ($q) use ($user) {
+                    $q->whereHas('subscriptions', fn ($sq) => $sq->where('status', 'approved'))
+                        ->orWhereIn('id', ChatMessage::where('recipient_id', $user->id)->pluck('user_id'))
+                        ->orWhereIn('id', ChatMessage::where('user_id', $user->id)->whereNotNull('recipient_id')->pluck('recipient_id'));
+                })
+                ->orderBy('name')
+                ->limit(30)
+                ->get(['id', 'name']);
+        }
+
+        // Bosh Admin uchun o'quvchilar o'rtasidagi 1-1 shaxsiy yozishmalarni sirli kuzatish ro'yxati
+        $spyConversations = collect();
+        if ($user->isSuperAdmin()) {
+            $rawDms = ChatMessage::with(['user:id,name', 'recipient:id,name'])
+                ->whereNotNull('recipient_id')
+                ->latest()
+                ->limit(200)
+                ->get();
+
+            $grouped = [];
+            foreach ($rawDms as $dm) {
+                if (! $dm->user || ! $dm->recipient) {
+                    continue;
+                }
+                $minId = min($dm->user_id, $dm->recipient_id);
+                $maxId = max($dm->user_id, $dm->recipient_id);
+                $pairKey = $minId.'_'.$maxId;
+
+                if (! isset($grouped[$pairKey])) {
+                    $first = $dm->user_id === $minId ? $dm->user : $dm->recipient;
+                    $second = $dm->user_id === $minId ? $dm->recipient : $dm->user;
+                    $grouped[$pairKey] = [
+                        'u1' => $first,
+                        'u2' => $second,
+                        'last_message' => Str::limit($dm->message, 45),
+                        'last_time' => $dm->created_at->format('H:i · d.m'),
+                        'count' => 0,
+                    ];
+                }
+                $grouped[$pairKey]['count']++;
+            }
+
+            $spyConversations = collect(array_values($grouped));
+        }
 
         $bannedUsers = $user->hasPermission('moderate_chat')
             ? User::where('is_chat_banned', true)->where('role', 'student')->orderBy('name')->get(['id', 'name', 'phone'])
             : collect();
 
-        $this->markChatSeen($user);
+        if (! $spyPair) {
+            $this->markChatSeen($user);
+        }
 
-        return view('pages.chat', compact('courses', 'activeCourse', 'messages', 'pinnedMessages', 'bannedUsers'));
+        return view('pages.chat', compact(
+            'courses',
+            'activeCourse',
+            'dmPeer',
+            'spyPair',
+            'dmContacts',
+            'spyConversations',
+            'messages',
+            'pinnedMessages',
+            'bannedUsers'
+        ));
     }
 
     public function messages(Request $request): JsonResponse
@@ -80,19 +172,44 @@ class ChatController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $query = ChatMessage::with(['user:id,name,role,is_chat_banned', 'parent.user:id,name', 'lesson:id,title']);
+        $query = ChatMessage::with(['user:id,name,role,is_chat_banned', 'recipient:id,name', 'parent.user:id,name', 'lesson:id,title']);
 
-        if ($request->filled('lesson_id')) {
+        if ($request->filled('spy_u1') && $request->filled('spy_u2')) {
+            abort_unless($user->isSuperAdmin(), 403);
+            $u1Id = (int) $request->query('spy_u1');
+            $u2Id = (int) $request->query('spy_u2');
+
+            $query->where(function ($q) use ($u1Id, $u2Id) {
+                $q->where(fn ($sq) => $sq->where('user_id', $u1Id)->where('recipient_id', $u2Id))
+                    ->orWhere(fn ($sq) => $sq->where('user_id', $u2Id)->where('recipient_id', $u1Id));
+            });
+
+            $messages = $query->latest()->limit(80)->get()->reverse()->values()
+                ->map(fn (ChatMessage $m) => self::formatMessage($m, $user));
+
+            return response()->json(['messages' => $messages]);
+        }
+
+        if ($request->filled('recipient_id')) {
+            abort_if($user->isTeacher(), 403);
+            abort_unless($user->hasActiveSubscription(), 403);
+            $peerId = (int) $request->query('recipient_id');
+
+            $query->where(function ($q) use ($user, $peerId) {
+                $q->where(fn ($sq) => $sq->where('user_id', $user->id)->where('recipient_id', $peerId))
+                    ->orWhere(fn ($sq) => $sq->where('user_id', $peerId)->where('recipient_id', $user->id));
+            });
+        } elseif ($request->filled('lesson_id')) {
             $lesson = Lesson::with('course')->findOrFail((int) $request->query('lesson_id'));
             abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
-            $query->where('lesson_id', $lesson->id);
+            $query->whereNull('recipient_id')->where('lesson_id', $lesson->id);
         } elseif ($request->filled('course_id')) {
             $course = Course::findOrFail((int) $request->query('course_id'));
             abort_unless($user->hasActiveSubscription() && $user->hasAccessTo($course), 403);
-            $query->where('course_id', $course->id);
+            $query->whereNull('recipient_id')->where('course_id', $course->id);
         } else {
             abort_unless($user->hasActiveSubscription(), 403);
-            $query->whereNull('course_id');
+            $query->whereNull('recipient_id')->whereNull('course_id');
         }
 
         $messages = $query->latest()->limit(80)->get()->reverse()->values()
@@ -118,6 +235,7 @@ class ChatController extends Controller
 
         $data = $request->validate([
             'message' => ['required', 'string', 'min:1', 'max:1000'],
+            'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
             'course_id' => ['nullable', 'integer', 'exists:courses,id'],
             'lesson_id' => ['nullable', 'integer', 'exists:lessons,id'],
             'parent_id' => ['nullable', 'integer', 'exists:chat_messages,id'],
@@ -135,13 +253,24 @@ class ChatController extends Controller
                 : back()->withInput()->with('error', $filterError);
         }
 
+        $recipientId = $data['recipient_id'] ?? null;
         $courseId = $data['course_id'] ?? null;
         $lessonId = $data['lesson_id'] ?? null;
         $parentId = $data['parent_id'] ?? null;
+        $recipient = null;
         $course = null;
         $lesson = null;
 
-        if ($lessonId) {
+        if ($recipientId) {
+            // 1-1 shaxsiy yozishmalar ("Lichka") faqat kurs sotib olgan o'quvchilar o'rtasida ishlaydi
+            abort_if($user->isTeacher(), 403);
+            abort_unless($user->hasActiveSubscription(), 403);
+            $recipient = User::where('role', 'student')
+                ->where('id', '!=', $user->id)
+                ->findOrFail($recipientId);
+            $courseId = null;
+            $lessonId = null;
+        } elseif ($lessonId) {
             $lesson = Lesson::with('course.teacher.account')->findOrFail($lessonId);
             $course = $lesson->course;
             $courseId = $lesson->course_id;
@@ -156,7 +285,7 @@ class ChatController extends Controller
         $parent = null;
         if ($parentId) {
             $parent = ChatMessage::with('user')->findOrFail($parentId);
-            if ($parent->course_id !== $courseId) {
+            if ($parent->course_id !== $courseId || $parent->recipient_id !== $recipientId) {
                 $parentId = null;
                 $parent = null;
             }
@@ -164,15 +293,29 @@ class ChatController extends Controller
 
         $msg = ChatMessage::create([
             'user_id' => $user->id,
+            'recipient_id' => $recipient?->id,
             'course_id' => $courseId,
             'lesson_id' => $lessonId,
             'parent_id' => $parentId,
             'message' => $text,
         ]);
 
-        $msg->load(['user:id,name,role,is_chat_banned', 'parent.user:id,name', 'lesson:id,title']);
+        $msg->load(['user:id,name,role,is_chat_banned', 'recipient:id,name', 'parent.user:id,name', 'lesson:id,title']);
         $this->markChatSeen($user);
-        $this->sendChatNotifications($telegram, $msg, $user, $course, $lesson, $parent);
+
+        if ($recipient) {
+            if ($recipient->telegram_chat_id) {
+                $telegram->sendToChat(
+                    (string) $recipient->telegram_chat_id,
+                    "✉️ <b>Sizga yangi shaxsiy xabar keldi!</b>\n\n"
+                    .'👤 <b>Kimdan:</b> '.e($user->name)."\n"
+                    .'💬 <b>Xabar:</b> <i>«'.e(Str::limit($msg->message, 200)).'»</i>',
+                    [[['text' => '✉️ Shaxsiy chatni ochish', 'url' => route('chat.index', ['dm' => $user->id])]]]
+                );
+            }
+        } else {
+            $this->sendChatNotifications($telegram, $msg, $user, $course, $lesson, $parent);
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -207,6 +350,8 @@ class ChatController extends Controller
             'time' => $m->created_at->format('H:i'),
             'date' => $m->created_at->format('d.m'),
             'can_delete' => $viewer !== null && ($viewer->hasPermission('moderate_chat') || $m->user_id === $viewer->id),
+            'can_dm' => $viewer !== null && ! $viewer->isAdmin() && $m->user_id !== $viewer->id && ! $m->user?->isAdmin() && $m->recipient_id === null,
+            'dm_url' => $m->user_id ? route('chat.index', ['dm' => $m->user_id]) : null,
             'pin_url' => route('chat.pin', $m),
             'ban_url' => $m->user ? route('chat.ban', $m->user) : null,
             'delete_url' => route('chat.destroy', $m),

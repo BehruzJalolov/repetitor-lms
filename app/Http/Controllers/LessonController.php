@@ -37,6 +37,7 @@ class LessonController extends Controller
         $index = $lessons->search(fn ($l) => $l->id === $lesson->id);
 
         $chatMessages = $lesson->chatMessages()
+            ->whereNull('recipient_id')
             ->with(['user:id,name,role,is_chat_banned', 'parent.user:id,name'])
             ->limit(60)
             ->get()

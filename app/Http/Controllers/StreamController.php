@@ -62,6 +62,7 @@ class StreamController extends Controller
         }
 
         $chatMessages = ChatMessage::with(['user:id,name,role,is_chat_banned', 'parent.user:id,name'])
+            ->whereNull('recipient_id')
             ->when($stream->course_id, fn ($q) => $q->where('course_id', $stream->course_id), fn ($q) => $q->whereNull('course_id'))
             ->latest()
             ->limit(60)
