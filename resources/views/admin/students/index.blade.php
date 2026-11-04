@@ -21,6 +21,7 @@
                 <th class="px-5 py-3">Aloqa</th>
                 <th class="px-5 py-3">Ochilgan kurslar</th>
                 <th class="px-5 py-3">Kutilayotgan</th>
+                <th class="px-5 py-3">Chat holati</th>
                 <th class="px-5 py-3">Ro'yxatdan o'tgan</th>
             </tr>
         </thead>
@@ -40,10 +41,28 @@
                             <span class="badge bg-amber-100 text-amber-700">{{ $student->pending_count }}</span>
                         @else <span class="text-slate-300">—</span> @endif
                     </td>
+                    <td class="px-5 py-3.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            @if ($student->is_chat_banned)
+                                <span class="badge bg-rose-100 text-rose-700">🔇 Bloklangan</span>
+                            @else
+                                <span class="badge bg-emerald-50 text-emerald-700">🟢 Faol</span>
+                            @endif
+
+                            @if (auth()->user()?->hasPermission('moderate_chat'))
+                                <form method="POST" action="{{ route('chat.ban', $student) }}">
+                                    @csrf
+                                    <button type="submit" class="rounded-lg border px-2.5 py-1 text-xs font-bold transition {{ $student->is_chat_banned ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100' }}">
+                                        {{ $student->is_chat_banned ? '🔊 Blokdan ochish' : '🔇 Bloklash' }}
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </td>
                     <td class="px-5 py-3.5 text-slate-500">{{ $student->created_at->format('d.m.Y') }}</td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="p-12 text-center text-slate-400">O'quvchilar topilmadi</td></tr>
+                <tr><td colspan="6" class="p-12 text-center text-slate-400">O'quvchilar topilmadi</td></tr>
             @endforelse
         </tbody>
     </table>

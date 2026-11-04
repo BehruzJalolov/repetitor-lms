@@ -44,6 +44,38 @@
                         <li>• Qoidabuzarlar ustoz tomonidan chatdan cheklanadi.</li>
                     </ul>
                 </div>
+
+                @if (auth()->user()?->hasPermission('moderate_chat'))
+                    <div class="mt-4 rounded-2xl border border-rose-200 bg-rose-50/60 p-3.5 text-xs">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="font-extrabold text-rose-800">🔇 Bloklanganlar</p>
+                            <span class="rounded-full bg-rose-200/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-900">
+                                {{ ($bannedUsers ?? collect())->count() }}
+                            </span>
+                        </div>
+
+                        @if (($bannedUsers ?? collect())->isNotEmpty())
+                            <div class="mt-2.5 space-y-2">
+                                @foreach ($bannedUsers as $bannedUser)
+                                    <div class="flex items-center justify-between gap-2 rounded-xl bg-white p-2 shadow-2xs ring-1 ring-rose-100">
+                                        <div class="min-w-0">
+                                            <p class="truncate font-bold text-slate-800">{{ $bannedUser->name }}</p>
+                                            <p class="truncate text-[10px] text-slate-400">{{ $bannedUser->phone }}</p>
+                                        </div>
+                                        <form method="POST" action="{{ route('chat.ban', $bannedUser) }}" class="shrink-0">
+                                            @csrf
+                                            <button type="submit" class="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-emerald-700">
+                                                🔊 Ochish
+                                            </button>
+                                        </form>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="mt-1.5 text-[11px] text-slate-500">Hozircha bloklangan o'quvchilar yo'q.</p>
+                        @endif
+                    </div>
+                @endif
             </div>
         </aside>
 

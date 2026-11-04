@@ -66,9 +66,13 @@ class ChatController extends Controller
         $pinnedMessages = (clone $query)->where('is_pinned', true)->latest()->limit(3)->get();
         $messages = $query->latest()->limit(80)->get()->reverse()->values();
 
+        $bannedUsers = $user->hasPermission('moderate_chat')
+            ? User::where('is_chat_banned', true)->where('role', 'student')->orderBy('name')->get(['id', 'name', 'phone'])
+            : collect();
+
         $this->markChatSeen($user);
 
-        return view('pages.chat', compact('courses', 'activeCourse', 'messages', 'pinnedMessages'));
+        return view('pages.chat', compact('courses', 'activeCourse', 'messages', 'pinnedMessages', 'bannedUsers'));
     }
 
     public function messages(Request $request): JsonResponse
