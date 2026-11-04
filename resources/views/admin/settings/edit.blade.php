@@ -88,9 +88,17 @@
                     <p class="mt-1 text-xs text-slate-500">Bot token bazada shifrlangan (`AES-256`) holda xavfsiz saqlanadi.</p>
                 </div>
                 @if ($settings['has_bot_token'])
-                    <span class="badge bg-emerald-100 text-emerald-700">🔒 Token shifrlangan</span>
+                    <span class="badge bg-emerald-100 text-emerald-700">✅ Bot Token ulangan</span>
+                @else
+                    <span class="badge bg-amber-100 text-amber-800">⚠️ Token kiritilmagan</span>
                 @endif
             </div>
+
+            @if (! $settings['has_bot_token'])
+                <div class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs font-semibold text-amber-900">
+                    ⚠️ <b>Muhim:</b> Telegram bot ishlashi va <code>/start</code> bosilganda javob qaytarishi uchun <b>@BotFather</b> dan olingan Bot Tokenni pastdagi maydonga joylab <b>«💾 Sozlamalarni saqlash»</b> tugmasini bosing.
+                </div>
+            @endif
 
             <div class="mt-5 grid gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">

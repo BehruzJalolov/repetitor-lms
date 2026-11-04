@@ -13,9 +13,9 @@ class SettingController extends Controller
 {
     private const MASKED_SECRET = '••••••••••••••••';
 
-    public function edit(): View
+    public function edit(TelegramNotificationService $telegram): View
     {
-        $hasBotToken = ! empty(Setting::getSecret('telegram_bot_token', config('services.telegram.bot_token', '')));
+        $hasBotToken = $telegram->getToken() !== null;
 
         $settings = [
             'site_name' => Setting::get('site_name', 'RepetitorLMS'),
@@ -82,6 +82,8 @@ class SettingController extends Controller
             'require_telegram_subscription' => $request->boolean('require_telegram_subscription') ? '1' : '0',
             'blocked_words' => $validated['blocked_words'] ?? null,
         ]);
+
+        $telegram->processBotUpdates();
 
         return back()->with('success', 'Sayt sozlamalari muvaffaqiyatli saqlandi!');
     }

@@ -8,27 +8,31 @@
      x-data="{
          started: false,
          verified: {{ ! empty($pending['channel_verified']) ? 'true' : 'false' }},
+         timer: null,
+         async pollOnce() {
+             if (this.verified) return;
+             try {
+                 const res = await fetch('{{ route('register.telegram.poll') }}', {
+                     headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                 });
+                 if (res.ok) {
+                     const data = await res.json();
+                     this.started = Boolean(data.started);
+                     if (data.verified) {
+                         this.verified = true;
+                         if (this.timer) clearInterval(this.timer);
+                     }
+                 }
+             } catch (e) {}
+         },
          init() {
              @if (! empty($botStartLink))
-             const timer = setInterval(async () => {
-                 if (this.verified) {
-                     clearInterval(timer);
-                     return;
-                 }
-                 try {
-                     const res = await fetch('{{ route('register.telegram.poll') }}', {
-                         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-                     });
-                     if (res.ok) {
-                         const data = await res.json();
-                         this.started = Boolean(data.started);
-                         if (data.verified) {
-                             this.verified = true;
-                             clearInterval(timer);
-                         }
-                     }
-                 } catch (e) {}
-             }, 2500);
+             this.pollOnce();
+             this.timer = setInterval(() => this.pollOnce(), 2500);
+             window.addEventListener('focus', () => this.pollOnce());
+             document.addEventListener('visibilitychange', () => {
+                 if (!document.hidden) this.pollOnce();
+             });
              @endif
          }
      }">

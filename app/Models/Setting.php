@@ -58,20 +58,43 @@ class Setting extends Model
             return $default;
         }
 
+        $rawStr = (string) $raw;
+
+        if (str_starts_with($rawStr, 'b64:')) {
+            $decoded = base64_decode(substr($rawStr, 4), true);
+
+            return ($decoded !== false && $decoded !== '') ? $decoded : $default;
+        }
+
         try {
-            return Crypt::decryptString((string) $raw);
+            return Crypt::decryptString($rawStr);
         } catch (DecryptException) {
-            return $raw;
+            // Agar eski APP_KEY bilan shifrlangan bo'lsa (eyJpdiI6...), zaxira nusxasini tekshiramiz
+            $backup = static::get($key.'_b64');
+            if (is_string($backup) && str_starts_with($backup, 'b64:')) {
+                $decoded = base64_decode(substr($backup, 4), true);
+                if ($decoded !== false && $decoded !== '') {
+                    return $decoded;
+                }
+            }
+
+            if (str_starts_with($rawStr, 'eyJpdiI6')) {
+                return $default;
+            }
+
+            return $rawStr;
         }
     }
 
     public static function setSecret(string $key, ?string $plainValue): void
     {
-        $encrypted = ($plainValue !== null && $plainValue !== '')
-            ? Crypt::encryptString($plainValue)
-            : null;
+        $clean = ($plainValue !== null && trim($plainValue) !== '') ? trim($plainValue) : null;
+        $encoded = $clean !== null ? 'b64:'.base64_encode($clean) : null;
 
-        static::setMany([$key => $encrypted]);
+        static::setMany([
+            $key => $encoded,
+            $key.'_b64' => $encoded,
+        ]);
     }
 
     /**

@@ -1187,4 +1187,88 @@ class CourseAndSubscriptionTest extends TestCase
         $this->get($chatImageUrl)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
         $this->actingAs($admin)->get(route('admin.subscriptions.receipt', $subscription))->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     }
+
+    public function test_mobile_user_sending_plain_start_and_telegram_work_timeout_command_completes_registration(): void
+    {
+        Setting::setSecret('telegram_bot_token', '123456:TEST_SECRET_TOKEN');
+        Setting::setMany([
+            'telegram_bot_username' => '@RepetiXBot',
+            'telegram_username' => '@ITblockbehruz',
+            'require_telegram_subscription' => '1',
+        ]);
+
+        // Even if encrypted value is corrupted (simulating APP_KEY rotation), b64 backup restores token cleanly
+        Setting::setMany(['telegram_bot_token' => 'eyJpdiI6ImNvcnJ1cHRlZCIsInZhbHVlIjoiMTIzIn0=']);
+        $this->assertSame('123456:TEST_SECRET_TOKEN', Setting::getSecret('telegram_bot_token'));
+
+        // 1. Mobile user fills out registration form
+        $this->post(route('register.store'), [
+            'name' => 'Mobil Talaba',
+            'phone' => '+998 91 222 33 44',
+            'email' => 'mobil@example.com',
+            'password' => 'secret1234',
+            'password_confirmation' => 'secret1234',
+        ])->assertRedirect(route('register.verify'));
+
+        $sentMessages = [];
+        Http::fake(function ($request) use (&$sentMessages) {
+            if (str_contains($request->url(), 'getUpdates')) {
+                return Http::response([
+                    'ok' => true,
+                    'result' => [
+                        [
+                            'update_id' => 501,
+                            'message' => [
+                                'chat' => ['id' => 444555666],
+                                'from' => ['id' => 444555666, 'first_name' => 'Mobil'],
+                                // Plain /start without reg_TOKEN (just like typing /start in Telegram mobile!)
+                                'text' => '/start',
+                            ],
+                        ],
+                        [
+                            'update_id' => 502,
+                            'callback_query' => [
+                                'id' => 'cb_mobile_1',
+                                'from' => ['id' => 444555666],
+                                'message' => ['chat' => ['id' => 444555666]],
+                                'data' => 'verify_sub:',
+                            ],
+                        ],
+                    ],
+                ]);
+            }
+
+            if (str_contains($request->url(), 'getChatMember')) {
+                return Http::response([
+                    'ok' => true,
+                    'result' => ['status' => 'member'],
+                ]);
+            }
+
+            if (str_contains($request->url(), 'sendMessage')) {
+                $sentMessages[] = (string) ($request['text'] ?? '');
+
+                return Http::response(['ok' => true]);
+            }
+
+            return Http::response(['ok' => true]);
+        });
+
+        // 2. Background worker command with --timeout option processes the updates while mobile browser is backgrounded
+        $this->artisan('telegram:work --once --timeout=25')->assertExitCode(0);
+
+        $this->assertCount(2, $sentMessages);
+        preg_match('/<code>(\d{6})<\/code>/', $sentMessages[1], $matches);
+        $this->assertNotEmpty($matches[1]);
+
+        // 3. Mobile user switches back to browser and enters the 6-digit code
+        $this->post(route('register.verify.store'), [
+            'code' => $matches[1],
+        ])->assertRedirect(route('courses.index'));
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'mobil@example.com',
+            'telegram_chat_id' => '444555666',
+        ]);
+    }
 }

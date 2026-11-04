@@ -54,11 +54,16 @@ if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
     fi
 fi
 
-# 6. Doimiy APP_KEY tekshiruvi (persistent storage ichida kalitni saqlab qolish bilan)
+# 6. Doimiy APP_KEY tekshiruvi (har bir Render deployda kalit o'zgarib ketmasligi uchun)
 PERSISTENT_KEY_FILE="/var/www/html/storage/app/private/.app_key"
 if [ -z "${APP_KEY:-}" ]; then
     if [ -f "${PERSISTENT_KEY_FILE}" ]; then
         export APP_KEY="$(cat "${PERSISTENT_KEY_FILE}")"
+    elif [ -n "${DB_URL:-}${DATABASE_URL:-}" ]; then
+        GENERATED_KEY="base64:$(printf '%s' "repetitor-lms-stable-key:${DB_URL:-${DATABASE_URL:-}}" | sha256sum | cut -c1-32 | base64)"
+        printf '%s' "${GENERATED_KEY}" > "${PERSISTENT_KEY_FILE}"
+        chmod 600 "${PERSISTENT_KEY_FILE}"
+        export APP_KEY="${GENERATED_KEY}"
     else
         php artisan key:generate --force --no-interaction
         GENERATED_KEY="$(grep '^APP_KEY=' .env | cut -d '=' -f2-)"
@@ -92,8 +97,8 @@ chown -R www-data:www-data storage bootstrap/cache database
 # 11. Telegram Bot background listener (tugmalar va obuna tekshiruvi 24/7 ishlashi uchun)
 (
     while true; do
-        su -s /bin/sh www-data -c "php /var/www/html/artisan telegram:work --timeout=25" >/dev/null 2>&1 || true
-        sleep 3
+        php /var/www/html/artisan telegram:work --timeout=25 >/dev/null 2>&1 || true
+        sleep 1
     done
 ) &
 

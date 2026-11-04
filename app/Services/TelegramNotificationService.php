@@ -16,7 +16,23 @@ class TelegramNotificationService
     {
         $token = Setting::getSecret('telegram_bot_token', config('services.telegram.bot_token'));
 
-        return is_string($token) && trim($token) !== '' ? trim($token) : null;
+        if (! is_string($token)) {
+            return null;
+        }
+
+        $trimmed = trim($token);
+
+        if ($trimmed === '' || str_starts_with($trimmed, 'eyJpdiI6') || ! str_contains($trimmed, ':')) {
+            $fallback = config('services.telegram.bot_token');
+
+            if (is_string($fallback) && trim($fallback) !== '' && str_contains($fallback, ':')) {
+                return trim($fallback);
+            }
+
+            return null;
+        }
+
+        return $trimmed;
     }
 
     public function send(string $message): bool
@@ -203,7 +219,7 @@ class TelegramNotificationService
 
         if (str_starts_with($text, '/start')) {
             $parts = preg_split('/\s+/', $text, 2);
-            $payload = $parts[1] ?? '';
+            $payload = trim((string) ($parts[1] ?? ''));
             $regToken = '';
 
             if (str_starts_with($payload, 'reg_')) {
@@ -364,13 +380,13 @@ class TelegramNotificationService
      *
      * @return array{ok: bool, message: string, chat_id?: string, code?: string}
      */
-    public function verifySubscriptionAndSendCode(string $chatId, string $regToken, ?string $callbackId = null): array
+    public function verifySubscriptionAndSendCode(string $chatId, string $regToken = '', ?string $callbackId = null): array
     {
         $context = $regToken !== '' ? Cache::get('tg_reg_context:'.$regToken) : null;
         $boundChatId = $regToken !== '' ? Cache::get('tg_start:'.$regToken) : null;
 
-        // Kod faqat saytda boshlangan va aynan shu Telegram chatga bog'langan so'rov uchun beriladi
-        if (! is_array($context) || $boundChatId === null || (string) $boundChatId !== $chatId) {
+        // Agar aniq regToken berilgan bo'lsa, u faqat o'sha bog'langan chatId ga tegishli bo'lishi shart
+        if ($regToken !== '' && (! is_array($context) || $boundChatId === null || (string) $boundChatId !== $chatId)) {
             $notFoundMessage = "Ro'yxatdan o'tish so'rovi topilmadi yoki muddati tugagan. Iltimos, saytdagi «Telegram botni ochish» tugmasi orqali botga qaytadan kiring.";
 
             if ($callbackId) {
@@ -424,8 +440,8 @@ class TelegramNotificationService
             }
         }
 
-        $email = $context['email'] ?? null;
-        $studentName = $context['name'] ?? 'O\'quvchi';
+        $email = is_array($context) ? ($context['email'] ?? null) : null;
+        $studentName = is_array($context) && ! empty($context['name']) ? $context['name'] : 'O\'quvchi';
 
         $code = (string) random_int(100000, 999999);
 
@@ -447,6 +463,13 @@ class TelegramNotificationService
                 'verified_at' => now()->toIso8601String(),
             ], now()->addMinutes(45));
         }
+
+        // Agar o'quvchi telefondan botga oddiy /start yozib kirgan bo'lsa ham kod ishlashi uchun:
+        Cache::put('tg_direct_code:'.$code, [
+            'chat_id' => $chatId,
+            'reg_token' => $regToken,
+            'verified_at' => now()->toIso8601String(),
+        ], now()->addMinutes(15));
 
         if ($callbackId) {
             $this->answerCallbackQuery($callbackId, '✅ Obuna tasdiqlandi! Sizga 6 xonali kod yuborildi.');

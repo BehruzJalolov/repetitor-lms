@@ -94,6 +94,7 @@ class RegisterController extends Controller
 
     public function showVerifyForm(TelegramNotificationService $telegram)
     {
+        $telegram->processBotUpdates();
         $pending = $this->syncPendingTelegramState();
 
         if (! $pending) {
@@ -188,19 +189,14 @@ class RegisterController extends Controller
         return back()->with('success', $result['message']);
     }
 
-    public function verify(Request $request): RedirectResponse
+    public function verify(Request $request, TelegramNotificationService $telegram): RedirectResponse
     {
+        $telegram->processBotUpdates();
         $pending = $this->syncPendingTelegramState();
 
         if (! $pending) {
             return redirect()->route('register')
                 ->with('error', 'Sessiya muddati tugagan. Qaytadan ro\'yxatdan o\'ting.');
-        }
-
-        if ($this->isTelegramSubscriptionRequired() && empty($pending['channel_verified'])) {
-            return back()->withErrors([
-                'code' => 'Ro\'yxatdan o\'tishni yakunlash uchun avval Telegram bot va rasmiy kanalga a\'zo bo\'lib, obunani tasdiqlang.',
-            ]);
         }
 
         $request->validate([
@@ -211,47 +207,67 @@ class RegisterController extends Controller
             'code.regex' => 'Tasdiqlash kodi faqat raqamlardan iborat bo\'lishi kerak.',
         ]);
 
-        $tokenKey = 'reg:'.$pending['email'];
-        $record = DB::table('password_reset_tokens')->where('phone', $tokenKey)->first();
+        $submittedCode = (string) $request->input('code');
+        $directCodeData = Cache::get('tg_direct_code:'.$submittedCode);
 
-        if (! $record || Carbon::parse($record->created_at)->addMinutes(self::EXPIRES_MINUTES)->isPast()) {
-            DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
+        if (is_array($directCodeData) && ! empty($directCodeData['chat_id'])) {
+            $pending['telegram_chat_id'] = (string) $directCodeData['chat_id'];
+            $pending['channel_verified'] = true;
+            session(['pending_registration' => $pending]);
+        }
 
+        if ($this->isTelegramSubscriptionRequired() && empty($pending['channel_verified'])) {
             return back()->withErrors([
-                'code' => 'Tasdiqlash kodi muddati o\'tgan. "Qayta yuborish" tugmasini bosing.',
+                'code' => 'Ro\'yxatdan o\'tishni yakunlash uchun avval Telegram bot va rasmiy kanalga a\'zo bo\'lib, obunani tasdiqlang.',
             ]);
         }
 
-        // Urinishni atomik tarzda band qilamiz: parallel so'rovlar limitdan oshib keta olmaydi
-        $reserved = DB::table('password_reset_tokens')
-            ->where('phone', $tokenKey)
-            ->where('attempts', '<', self::MAX_ATTEMPTS)
-            ->increment('attempts');
+        $tokenKey = 'reg:'.$pending['email'];
+        $record = DB::table('password_reset_tokens')->where('phone', $tokenKey)->first();
+        $matchedViaDirectCode = is_array($directCodeData) && ! empty($directCodeData['chat_id']);
 
-        if ($reserved === 0) {
-            DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
-            session()->forget('pending_registration');
+        if (! $matchedViaDirectCode) {
+            if (! $record || Carbon::parse($record->created_at)->addMinutes(self::EXPIRES_MINUTES)->isPast()) {
+                DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
 
-            return redirect()->route('register')
-                ->with('error', 'Ko\'p marta noto\'g\'ri kod kiritildi. Qaytadan ro\'yxatdan o\'ting.');
-        }
+                return back()->withErrors([
+                    'code' => 'Tasdiqlash kodi muddati o\'tgan. "Qayta yuborish" tugmasini bosing.',
+                ]);
+            }
 
-        if (! Hash::check($request->input('code'), $record->token)) {
-            $attempts = (int) DB::table('password_reset_tokens')->where('phone', $tokenKey)->value('attempts');
+            // Urinishni atomik tarzda band qilamiz: parallel so'rovlar limitdan oshib keta olmaydi
+            $reserved = DB::table('password_reset_tokens')
+                ->where('phone', $tokenKey)
+                ->where('attempts', '<', self::MAX_ATTEMPTS)
+                ->increment('attempts');
 
-            if ($attempts >= self::MAX_ATTEMPTS) {
+            if ($reserved === 0) {
                 DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
                 session()->forget('pending_registration');
 
                 return redirect()->route('register')
-                    ->with('error', '5 marta noto\'g\'ri kod kiritildi. Xavfsizlik uchun so\'rov bekor qilindi.');
+                    ->with('error', 'Ko\'p marta noto\'g\'ri kod kiritildi. Qaytadan ro\'yxatdan o\'ting.');
             }
 
-            $remaining = self::MAX_ATTEMPTS - $attempts;
+            if (! Hash::check($submittedCode, $record->token)) {
+                $attempts = (int) DB::table('password_reset_tokens')->where('phone', $tokenKey)->value('attempts');
 
-            return back()->withErrors([
-                'code' => "Tasdiqlash kodi noto'g'ri. Qolgan urinishlar: {$remaining}.",
-            ]);
+                if ($attempts >= self::MAX_ATTEMPTS) {
+                    DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
+                    session()->forget('pending_registration');
+
+                    return redirect()->route('register')
+                        ->with('error', '5 marta noto\'g\'ri kod kiritildi. Xavfsizlik uchun so\'rov bekor qilindi.');
+                }
+
+                $remaining = self::MAX_ATTEMPTS - $attempts;
+
+                return back()->withErrors([
+                    'code' => "Tasdiqlash kodi noto'g'ri. Qolgan urinishlar: {$remaining}.",
+                ]);
+            }
+        } else {
+            Cache::forget('tg_direct_code:'.$submittedCode);
         }
 
         if (User::where('phone', $pending['phone'])->orWhere('email', $pending['email'])->exists()) {
