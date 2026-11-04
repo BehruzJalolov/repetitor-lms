@@ -75,7 +75,6 @@ class RegisterController extends Controller
             'email' => $data['email'],
             'phone' => $data['phone'],
         ], now()->addMinutes(45));
-        Cache::put('tg_latest_reg_token', $telegramToken, now()->addMinutes(45));
 
         session([
             'pending_registration' => [
@@ -223,7 +222,13 @@ class RegisterController extends Controller
             ]);
         }
 
-        if ($record->attempts >= self::MAX_ATTEMPTS) {
+        // Urinishni atomik tarzda band qilamiz: parallel so'rovlar limitdan oshib keta olmaydi
+        $reserved = DB::table('password_reset_tokens')
+            ->where('phone', $tokenKey)
+            ->where('attempts', '<', self::MAX_ATTEMPTS)
+            ->increment('attempts');
+
+        if ($reserved === 0) {
             DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
             session()->forget('pending_registration');
 
@@ -232,7 +237,7 @@ class RegisterController extends Controller
         }
 
         if (! Hash::check($request->input('code'), $record->token)) {
-            $attempts = $record->attempts + 1;
+            $attempts = (int) DB::table('password_reset_tokens')->where('phone', $tokenKey)->value('attempts');
 
             if ($attempts >= self::MAX_ATTEMPTS) {
                 DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
@@ -241,10 +246,6 @@ class RegisterController extends Controller
                 return redirect()->route('register')
                     ->with('error', '5 marta noto\'g\'ri kod kiritildi. Xavfsizlik uchun so\'rov bekor qilindi.');
             }
-
-            DB::table('password_reset_tokens')
-                ->where('phone', $tokenKey)
-                ->update(['attempts' => $attempts]);
 
             $remaining = self::MAX_ATTEMPTS - $attempts;
 

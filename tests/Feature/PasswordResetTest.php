@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Mail\PasswordResetCodeMail;
 use App\Mail\VerificationCodeMail;
+use App\Models\Course;
 use App\Models\User;
+use App\Services\TelegramNotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -222,5 +224,80 @@ class PasswordResetTest extends TestCase
 
         $this->assertSame('student', $user->role);
         $this->assertFalse($user->isAdmin());
+    }
+
+    public function test_stranger_cannot_hijack_pending_telegram_registration_without_token_or_from_another_chat(): void
+    {
+        $this->post(route('register.store'), [
+            'name' => 'Asl Talaba',
+            'phone' => '90 777 88 99',
+            'email' => 'asl@example.com',
+            'password' => 'secret1234',
+            'password_confirmation' => 'secret1234',
+        ])->assertRedirect(route('register.verify'));
+
+        $regToken = (string) session('pending_registration.telegram_token');
+        $this->assertNotEmpty($regToken);
+
+        $telegram = app(TelegramNotificationService::class);
+
+        // 1. Begona odam tokensiz oddiy /start yuborsa, asl foydalanuvchining tokeniga ulanib qolmasligi kerak
+        $telegram->handleSingleUpdate([
+            'message' => [
+                'chat' => ['id' => 999111222],
+                'from' => ['id' => 999111222, 'first_name' => 'Stranger'],
+                'text' => '/start',
+            ],
+        ]);
+
+        $this->assertNull(Cache::get('tg_start:'.$regToken));
+
+        // 2. Asl foydalanuvchi o'zining maxsus reg_ tokeni bilan /start bosadi
+        $telegram->handleSingleUpdate([
+            'message' => [
+                'chat' => ['id' => 111222333],
+                'from' => ['id' => 111222333, 'first_name' => 'Asl'],
+                'text' => '/start reg_'.$regToken,
+            ],
+        ]);
+
+        $this->assertSame('111222333', (string) Cache::get('tg_start:'.$regToken));
+
+        // 3. Begona chat_id xuddi shu reg_ tokenni qayta egallab ololmaydi va kod ololmaydi
+        $telegram->handleSingleUpdate([
+            'message' => [
+                'chat' => ['id' => 999111222],
+                'from' => ['id' => 999111222, 'first_name' => 'Attacker'],
+                'text' => '/start reg_'.$regToken,
+            ],
+        ]);
+
+        $this->assertSame('111222333', (string) Cache::get('tg_start:'.$regToken));
+
+        $hijackAttempt = $telegram->verifySubscriptionAndSendCode('999111222', $regToken);
+        $this->assertFalse($hijackAttempt['ok']);
+    }
+
+    public function test_unpaid_student_cannot_read_or_post_in_paid_course_chat(): void
+    {
+        $student = User::factory()->create();
+        $paidCourse = Course::create([
+            'title' => 'Yopiq Premium Kurs',
+            'slug' => 'yopiq-premium-kurs',
+            'description' => 'Maxsus kurs',
+            'price' => 300000,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($student)
+            ->getJson(route('chat.messages', ['course_id' => $paidCourse->id]))
+            ->assertForbidden();
+
+        $this->actingAs($student)
+            ->postJson(route('chat.store'), [
+                'course_id' => $paidCourse->id,
+                'message' => 'Bepul kirishga urinish',
+            ])
+            ->assertForbidden();
     }
 }

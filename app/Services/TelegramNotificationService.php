@@ -119,6 +119,7 @@ class TelegramNotificationService
 
     /**
      * Telegram Bot ga kelgan yangi xabarlar (`/start`) va tugma bosishlarni (`callback_query`) qayta ishlaydi.
+     * Fon jarayoni (`telegram:work`) va veb so'rovlar bir vaqtda `getUpdates` chaqirmasligi uchun qulf ishlatiladi.
      */
     public function processBotUpdates(): void
     {
@@ -128,6 +129,11 @@ class TelegramNotificationService
             return;
         }
 
+        Cache::lock('tg_get_updates_lock', 20)->get(fn () => $this->fetchAndHandleUpdates($token));
+    }
+
+    private function fetchAndHandleUpdates(string $token): void
+    {
         $offset = (int) Cache::get('tg_last_update_offset', 0);
 
         try {
@@ -205,12 +211,11 @@ class TelegramNotificationService
             }
 
             if ($regToken === '') {
-                $regToken = (string) Cache::get('tg_chat_reg_token:'.$chatId, Cache::get('tg_latest_reg_token', ''));
+                $regToken = (string) Cache::get('tg_chat_reg_token:'.$chatId, '');
             }
 
-            if ($regToken !== '') {
-                Cache::put('tg_start:'.$regToken, (string) $chatId, now()->addMinutes(45));
-                Cache::put('tg_chat_reg_token:'.$chatId, $regToken, now()->addMinutes(45));
+            if (! $this->bindRegistrationTokenToChat($regToken, (string) $chatId)) {
+                $regToken = '';
             }
 
             $this->sendRegistrationMenu((string) $chatId, $firstName, $regToken);
@@ -219,7 +224,7 @@ class TelegramNotificationService
         }
 
         if ($text === '/code' || $text === '🔐 Kod olish') {
-            $regToken = (string) Cache::get('tg_chat_reg_token:'.$chatId, Cache::get('tg_latest_reg_token', ''));
+            $regToken = (string) Cache::get('tg_chat_reg_token:'.$chatId, '');
             $this->verifySubscriptionAndSendCode((string) $chatId, $regToken);
         }
     }
@@ -240,12 +245,11 @@ class TelegramNotificationService
         if (str_starts_with($data, 'verify_sub:')) {
             $regToken = substr($data, 11);
             if ($regToken === '') {
-                $regToken = (string) Cache::get('tg_chat_reg_token:'.$chatId, Cache::get('tg_latest_reg_token', ''));
+                $regToken = (string) Cache::get('tg_chat_reg_token:'.$chatId, '');
             }
 
-            if ($regToken !== '') {
-                Cache::put('tg_start:'.$regToken, $chatId, now()->addMinutes(45));
-                Cache::put('tg_chat_reg_token:'.$chatId, $regToken, now()->addMinutes(45));
+            if (! $this->bindRegistrationTokenToChat($regToken, $chatId)) {
+                $regToken = '';
             }
 
             $this->verifySubscriptionAndSendCode($chatId, $regToken, $callbackId);
@@ -362,6 +366,22 @@ class TelegramNotificationService
      */
     public function verifySubscriptionAndSendCode(string $chatId, string $regToken, ?string $callbackId = null): array
     {
+        $context = $regToken !== '' ? Cache::get('tg_reg_context:'.$regToken) : null;
+        $boundChatId = $regToken !== '' ? Cache::get('tg_start:'.$regToken) : null;
+
+        // Kod faqat saytda boshlangan va aynan shu Telegram chatga bog'langan so'rov uchun beriladi
+        if (! is_array($context) || $boundChatId === null || (string) $boundChatId !== $chatId) {
+            $notFoundMessage = "Ro'yxatdan o'tish so'rovi topilmadi yoki muddati tugagan. Iltimos, saytdagi «Telegram botni ochish» tugmasi orqali botga qaytadan kiring.";
+
+            if ($callbackId) {
+                $this->answerCallbackQuery($callbackId, $notFoundMessage, true);
+            }
+
+            $this->sendToChat($chatId, '⚠️ '.e($notFoundMessage));
+
+            return ['ok' => false, 'message' => $notFoundMessage];
+        }
+
         $channel = trim((string) Setting::get('telegram_username', config('services.telegram.channel_username', '@ITblockbehruz')));
         $formattedChannel = $channel !== '' ? (str_starts_with($channel, '@') ? $channel : '@'.$channel) : '';
 
@@ -404,9 +424,8 @@ class TelegramNotificationService
             }
         }
 
-        $context = $regToken !== '' ? Cache::get('tg_reg_context:'.$regToken) : null;
-        $email = is_array($context) ? ($context['email'] ?? null) : null;
-        $studentName = is_array($context) ? ($context['name'] ?? 'O\'quvchi') : 'O\'quvchi';
+        $email = $context['email'] ?? null;
+        $studentName = $context['name'] ?? 'O\'quvchi';
 
         $code = (string) random_int(100000, 999999);
 
@@ -469,6 +488,32 @@ class TelegramNotificationService
             'chat_id' => $chatId,
             'code' => $code,
         ];
+    }
+
+    /**
+     * Ro'yxatdan o'tish tokenini Telegram chatga bog'laydi.
+     * Token saytda yaratilgan bo'lishi va boshqa chatga bog'lanmagan bo'lishi shart.
+     */
+    private function bindRegistrationTokenToChat(string $regToken, string $chatId): bool
+    {
+        if ($regToken === '' || ! Cache::has('tg_reg_context:'.$regToken)) {
+            return false;
+        }
+
+        $boundChatId = Cache::get('tg_start:'.$regToken);
+
+        if ($boundChatId !== null && (string) $boundChatId !== $chatId) {
+            Log::warning('Telegram: ro\'yxatdan o\'tish tokenini boshqa chatga bog\'lashga urinish bloklandi.', [
+                'chat_id' => $chatId,
+            ]);
+
+            return false;
+        }
+
+        Cache::put('tg_start:'.$regToken, $chatId, now()->addMinutes(45));
+        Cache::put('tg_chat_reg_token:'.$chatId, $regToken, now()->addMinutes(45));
+
+        return true;
     }
 
     /**

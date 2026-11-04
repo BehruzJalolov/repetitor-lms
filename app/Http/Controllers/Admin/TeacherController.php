@@ -230,14 +230,14 @@ class TeacherController extends Controller
             'telegram' => ['nullable', 'string', 'max:100'],
             'work_hours' => ['nullable', 'string', 'max:150'],
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
-            'login_password' => ['nullable', 'string', 'min:6', 'max:100'],
+            'login_password' => ['nullable', 'string', 'min:8', 'max:100'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', Rule::in(array_keys(User::TEACHER_PERMISSIONS))],
         ], [
             'name.required' => 'Ustozning ism va familiyasini kiriting.',
             'subject.required' => 'Dars beradigan fani / yo\'nalishini kiriting.',
             'email.unique' => 'Ushbu email manzil boshqa foydalanuvchi tomonidan band qilingan.',
-            'login_password.min' => 'Ustoz paroli kamida 6 ta belgidan iborat bo\'lsin.',
+            'login_password.min' => 'Ustoz paroli kamida 8 ta belgidan iborat bo\'lsin.',
         ]);
 
         $data['is_active'] = $request->boolean('is_active');

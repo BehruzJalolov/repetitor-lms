@@ -16,11 +16,26 @@ class ChatController extends Controller
 {
     public function index(Request $request): View
     {
-        $courses = Course::where('is_active', true)->orderBy('title')->get();
+        /** @var User $user */
+        $user = $request->user();
+
+        $courses = Course::where('is_active', true)
+            ->orderBy('title')
+            ->get()
+            ->filter(fn (Course $course) => $user->hasAccessTo($course))
+            ->values();
+
         $activeCourse = null;
 
         if ($request->filled('course')) {
-            $activeCourse = $courses->firstWhere('slug', (string) $request->query('course'));
+            $requestedCourse = Course::where('is_active', true)
+                ->where('slug', (string) $request->query('course'))
+                ->first();
+
+            if ($requestedCourse) {
+                abort_unless($user->hasAccessTo($requestedCourse), 403);
+                $activeCourse = $requestedCourse;
+            }
         }
 
         $query = ChatMessage::with(['user:id,name,role,is_chat_banned', 'parent.user:id,name', 'lesson:id,title']);
@@ -39,12 +54,19 @@ class ChatController extends Controller
 
     public function messages(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
         $query = ChatMessage::with(['user:id,name,role,is_chat_banned', 'parent.user:id,name', 'lesson:id,title']);
 
         if ($request->filled('lesson_id')) {
-            $query->where('lesson_id', (int) $request->query('lesson_id'));
+            $lesson = Lesson::with('course')->findOrFail((int) $request->query('lesson_id'));
+            abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
+            $query->where('lesson_id', $lesson->id);
         } elseif ($request->filled('course_id')) {
-            $query->where('course_id', (int) $request->query('course_id'));
+            $course = Course::findOrFail((int) $request->query('course_id'));
+            abort_unless($user->hasAccessTo($course), 403);
+            $query->where('course_id', $course->id);
         } else {
             $query->whereNull('course_id');
         }
@@ -109,6 +131,9 @@ class ChatController extends Controller
             $lesson = Lesson::with('course')->findOrFail($lessonId);
             $courseId = $lesson->course_id;
             abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
+        } elseif ($courseId) {
+            $course = Course::findOrFail($courseId);
+            abort_unless($user->hasAccessTo($course), 403);
         }
 
         if ($parentId) {

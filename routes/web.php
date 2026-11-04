@@ -69,7 +69,7 @@ Route::middleware('auth')->group(function () {
 // Autentifikatsiya
 Route::middleware('guest')->group(function () {
     Route::get('/kirish', [LoginController::class, 'create'])->name('login');
-    Route::post('/kirish', [LoginController::class, 'store'])->name('login.store');
+    Route::post('/kirish', [LoginController::class, 'store'])->middleware('throttle:20,1,login_store')->name('login.store');
     Route::get('/royxatdan-otish', [RegisterController::class, 'create'])->name('register');
     Route::post('/royxatdan-otish', [RegisterController::class, 'store'])->middleware('throttle:5,1,register_store')->name('register.store');
     Route::get('/royxatdan-otish/tasdiqlash', [RegisterController::class, 'showVerifyForm'])->name('register.verify');

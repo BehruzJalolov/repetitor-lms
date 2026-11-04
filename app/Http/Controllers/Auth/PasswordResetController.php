@@ -56,11 +56,6 @@ class PasswordResetController extends Controller
                 ]);
             }
             $user = User::where('email', $identifier)->first();
-            if (! $user) {
-                return back()->withInput()->withErrors([
-                    'phone' => 'Bu email manzil bilan hisob topilmadi.',
-                ]);
-            }
         } else {
             $identifier = Phone::normalize($rawInput);
             if (! $identifier) {
@@ -69,11 +64,11 @@ class PasswordResetController extends Controller
                 ]);
             }
             $user = User::where('phone', $identifier)->first();
-            if (! $user) {
-                return back()->withInput()->withErrors([
-                    'phone' => 'Bu telefon raqam bilan hisob topilmadi.',
-                ]);
-            }
+        }
+
+        // Hisob mavjud yoki mavjud emasligini oshkor qilmaslik uchun javob har doim bir xil bo'ladi
+        if (! $user) {
+            return $this->redirectToResetForm($identifier);
         }
 
         // Qayta kod so'rash uchun 60 soniyalik cheklov (spam himoyasi)
@@ -81,11 +76,7 @@ class PasswordResetController extends Controller
         if ($existing && $existing->created_at) {
             $availableAt = Carbon::parse($existing->created_at)->addSeconds(self::RESEND_COOLDOWN_SECONDS);
             if ($availableAt->isFuture()) {
-                $secondsLeft = (int) ceil(now()->diffInSeconds($availableAt));
-
-                return back()->withInput()->withErrors([
-                    'phone' => "Iltimos, yangi kod so'rash uchun {$secondsLeft} soniya kuting.",
-                ]);
+                return $this->redirectToResetForm($identifier);
             }
         }
 
@@ -135,12 +126,18 @@ class PasswordResetController extends Controller
             );
         }
 
+        return $this->redirectToResetForm($identifier);
+    }
+
+    /**
+     * Hisob mavjudligidan qat'i nazar bir xil javob qaytaradi (foydalanuvchilarni aniqlashdan himoya).
+     */
+    private function redirectToResetForm(string $identifier): RedirectResponse
+    {
         session(['password_reset_phone' => $identifier]);
 
-        $channelLabel = $isEmail ? 'email manziliga' : 'raqamiga SMS orqali';
-
         return redirect()->route('password.reset')
-            ->with('success', "{$identifier} {$channelLabel} 6 xonali tasdiqlash kodi yuborildi.");
+            ->with('success', 'Agar ushbu ma\'lumot bilan hisob mavjud bo\'lsa, 6 xonali tasdiqlash kodi yuborildi. Kod 15 daqiqa amal qiladi.');
     }
 
     /**
@@ -201,7 +198,13 @@ class PasswordResetController extends Controller
             ]);
         }
 
-        if ($record->attempts >= self::MAX_ATTEMPTS) {
+        // Urinishni atomik tarzda band qilamiz: parallel so'rovlar limitdan oshib keta olmaydi
+        $reserved = DB::table('password_reset_tokens')
+            ->where('phone', $identifier)
+            ->where('attempts', '<', self::MAX_ATTEMPTS)
+            ->increment('attempts');
+
+        if ($reserved === 0) {
             DB::table('password_reset_tokens')->where('phone', $identifier)->delete();
             session()->forget('password_reset_phone');
 
@@ -210,7 +213,7 @@ class PasswordResetController extends Controller
         }
 
         if (! Hash::check($code, $record->token)) {
-            $attempts = $record->attempts + 1;
+            $attempts = (int) DB::table('password_reset_tokens')->where('phone', $identifier)->value('attempts');
 
             if ($attempts >= self::MAX_ATTEMPTS) {
                 DB::table('password_reset_tokens')->where('phone', $identifier)->delete();
@@ -220,10 +223,6 @@ class PasswordResetController extends Controller
                     ->with('error', '5 marta noto\'g\'ri kod kiritildi. Xavfsizlik uchun kod bekor qilindi, yangi kod so\'rang.');
             }
 
-            DB::table('password_reset_tokens')
-                ->where('phone', $identifier)
-                ->update(['attempts' => $attempts]);
-
             $remaining = self::MAX_ATTEMPTS - $attempts;
 
             return back()->withInput()->withErrors([
@@ -232,8 +231,15 @@ class PasswordResetController extends Controller
         }
 
         $user = $isEmail
-            ? User::where('email', $identifier)->firstOrFail()
-            : User::where('phone', $identifier)->firstOrFail();
+            ? User::where('email', $identifier)->first()
+            : User::where('phone', $identifier)->first();
+
+        if (! $user) {
+            DB::table('password_reset_tokens')->where('phone', $identifier)->delete();
+
+            return redirect()->route('password.request')
+                ->with('error', 'Tasdiqlash kodi muddati o\'tgan yoki topilmadi. Qaytadan kod so\'rang.');
+        }
 
         $user->forceFill([
             'password' => $request->input('password'),
