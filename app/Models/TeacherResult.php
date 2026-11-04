@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MediaStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 class TeacherResult extends Model
 {
@@ -28,12 +28,12 @@ class TeacherResult extends Model
 
     public function getStudentPhotoUrlAttribute(): ?string
     {
-        return $this->student_photo ? Storage::disk('public')->url($this->student_photo) : null;
+        return MediaStorage::url($this->student_photo);
     }
 
     public function getCertificateUrlAttribute(): ?string
     {
-        return $this->certificate_image ? Storage::disk('public')->url($this->certificate_image) : null;
+        return MediaStorage::url($this->certificate_image);
     }
 
     public function teacher(): BelongsTo

@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Subscription;
 use App\Services\TelegramNotificationService;
+use App\Support\MediaStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class SubscriptionController extends Controller
 {
@@ -40,9 +40,8 @@ class SubscriptionController extends Controller
     public function receipt(Request $request, Subscription $subscription)
     {
         abort_unless($request->user()->canManageSubscription($subscription), 403);
-        abort_unless(Storage::disk('local')->exists($subscription->receipt_image), 404);
 
-        return Storage::disk('local')->response($subscription->receipt_image);
+        return MediaStorage::response($subscription->receipt_image, 'local');
     }
 
     public function approve(Request $request, Subscription $subscription, TelegramNotificationService $telegram): RedirectResponse

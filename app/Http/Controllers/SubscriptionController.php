@@ -6,6 +6,7 @@ use App\Models\Course;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\TelegramNotificationService;
+use App\Support\MediaStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,12 +24,11 @@ class SubscriptionController extends Controller
         }
 
         $request->validate([
-            'receipt' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'receipt' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
         ], [
             'receipt.required' => 'Chek rasmini tanlang.',
-            'receipt.image' => 'Chek rasm formatida bo\'lishi kerak.',
             'receipt.mimes' => 'Faqat JPG, PNG yoki WEBP formatdagi rasm yuklang.',
-            'receipt.max' => 'Rasm hajmi 5 MB dan oshmasligi kerak.',
+            'receipt.max' => 'Rasm hajmi 10 MB dan oshmasligi kerak.',
             'receipt.uploaded' => 'Rasm yuklanmadi. Hajmi juda katta bo\'lishi mumkin.',
         ]);
 
@@ -43,7 +43,7 @@ class SubscriptionController extends Controller
                 'user_id' => $user->id,
                 'course_id' => $course->id,
                 'price' => $course->price,
-                'receipt_image' => $request->file('receipt')->store('receipts', 'local'),
+                'receipt_image' => MediaStorage::store($request->file('receipt'), 'receipts', 'local'),
                 'status' => 'pending',
             ]);
 

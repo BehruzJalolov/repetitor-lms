@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\MediaStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\Storage;
 
 class Teacher extends Model
 {
@@ -36,19 +36,9 @@ class Teacher extends Model
 
     public function getPhotoUrlAttribute(): string
     {
-        if (is_string($this->photo) && $this->photo !== '') {
-            if (
-                str_starts_with($this->photo, 'http://')
-                || str_starts_with($this->photo, 'https://')
-                || str_starts_with($this->photo, 'data:image/')
-                || str_starts_with($this->photo, '/')
-            ) {
-                return $this->photo;
-            }
-
-            if (Storage::disk('public')->exists($this->photo)) {
-                return Storage::disk('public')->url($this->photo);
-            }
+        $uploadedUrl = MediaStorage::url($this->photo);
+        if ($uploadedUrl !== null) {
+            return $uploadedUrl;
         }
 
         $bySlug = [

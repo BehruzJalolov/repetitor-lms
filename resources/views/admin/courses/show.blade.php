@@ -6,10 +6,19 @@
 <a href="{{ route('admin.courses.index') }}" class="text-sm font-medium text-slate-500 hover:text-brand-600">← Kurslar</a>
 
 <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
-    <div class="min-w-0 flex-1">
-        <h1 class="break-words text-xl font-extrabold text-slate-900 sm:text-2xl">{{ $course->title }}</h1>
-        <p class="mt-1 text-sm text-slate-500">{{ number_format($course->price, 0, '', ' ') }} so'm ·
-            <span class="{{ $course->is_active ? 'text-emerald-600' : 'text-slate-400' }}">{{ $course->is_active ? 'Faol' : 'Yashirin' }}</span></p>
+    <div class="flex min-w-0 flex-1 items-center gap-4">
+        @if ($course->thumbnail_url)
+            <img src="{{ $course->thumbnail_url }}" alt="{{ $course->title }}" class="h-16 w-24 shrink-0 rounded-2xl object-cover ring-1 ring-slate-200">
+        @else
+            <div class="flex h-16 w-24 shrink-0 items-center justify-center rounded-2xl text-2xl font-extrabold text-white" style="background: {{ $course->gradient }}">
+                {{ mb_strtoupper(mb_substr($course->title, 0, 1)) }}
+            </div>
+        @endif
+        <div class="min-w-0">
+            <h1 class="break-words text-xl font-extrabold text-slate-900 sm:text-2xl">{{ $course->title }}</h1>
+            <p class="mt-1 text-sm text-slate-500">{{ number_format($course->price, 0, '', ' ') }} so'm ·
+                <span class="{{ $course->is_active ? 'text-emerald-600' : 'text-slate-400' }}">{{ $course->is_active ? 'Faol' : 'Yashirin' }}</span></p>
+        </div>
     </div>
     <div class="flex w-full gap-2 sm:w-auto">
         <a href="{{ route('admin.courses.edit', $course) }}" class="btn-outline flex-1 !px-3 !py-2 text-xs sm:flex-initial sm:!px-4 sm:!py-2.5 sm:text-sm">Kursni tahrirlash</a>

@@ -25,10 +25,15 @@ mkdir -p \
     bootstrap/cache \
     database
 
-# 4. Production muhitda APP_DEBUG=false bo'lishini qat'iy ta'minlash
+# 4. Production muhitda APP_DEBUG=false va APP_URL ni Render domeniga avtomatik moslash
 if [ "${APP_ENV:-production}" = "production" ]; then
     export APP_DEBUG="false"
     sed -i "s|^APP_DEBUG=.*|APP_DEBUG=false|g" .env
+fi
+
+if [ -n "${RENDER_EXTERNAL_URL:-}" ]; then
+    export APP_URL="${RENDER_EXTERNAL_URL}"
+    sed -i "s|^APP_URL=.*|APP_URL=${RENDER_EXTERNAL_URL}|g" .env
 fi
 
 # 5. Ma'lumotlar bazasi ulanishini tekshirish:
@@ -68,6 +73,7 @@ fi
 sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|g" .env
 
 # 7. Keshni tozalash va storage symlink yaratish
+rm -rf public/storage || true
 php artisan config:clear --no-interaction || true
 php artisan storage:link --force --no-interaction || true
 

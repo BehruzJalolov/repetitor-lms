@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\MediaStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 class Course extends Model
 {
@@ -29,7 +29,7 @@ class Course extends Model
 
     public function getThumbnailUrlAttribute(): ?string
     {
-        return $this->thumbnail ? Storage::disk('public')->url($this->thumbnail) : null;
+        return MediaStorage::url($this->thumbnail);
     }
 
     /**

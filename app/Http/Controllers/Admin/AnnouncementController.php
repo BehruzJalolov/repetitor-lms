@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use App\Models\ChatMessage;
+use App\Support\MediaStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -51,7 +51,7 @@ class AnnouncementController extends Controller
         $data['teacher_id'] = $user->teacher_id;
 
         if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('announcements', 'public');
+            $data['image_path'] = MediaStorage::store($request->file('image'), 'announcements', 'public');
         }
 
         $announcement = Announcement::create($data);
@@ -92,12 +92,12 @@ class AnnouncementController extends Controller
 
         if ($request->hasFile('image')) {
             if ($announcement->image_path) {
-                Storage::disk('public')->delete($announcement->image_path);
+                MediaStorage::delete($announcement->image_path, 'public');
             }
-            $data['image_path'] = $request->file('image')->store('announcements', 'public');
+            $data['image_path'] = MediaStorage::store($request->file('image'), 'announcements', 'public');
         } elseif ($request->boolean('remove_image')) {
             if ($announcement->image_path) {
-                Storage::disk('public')->delete($announcement->image_path);
+                MediaStorage::delete($announcement->image_path, 'public');
             }
             $data['image_path'] = null;
         }
@@ -113,7 +113,7 @@ class AnnouncementController extends Controller
         $this->authorizeAccess($request, $announcement);
 
         if ($announcement->image_path) {
-            Storage::disk('public')->delete($announcement->image_path);
+            MediaStorage::delete($announcement->image_path, 'public');
         }
 
         $announcement->delete();
@@ -147,7 +147,7 @@ class AnnouncementController extends Controller
             'category' => ['required', 'string', Rule::in(array_keys(Announcement::CATEGORIES))],
             'excerpt' => ['nullable', 'string', 'max:300'],
             'body' => ['required', 'string', 'max:10000'],
-            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
             'link_url' => ['nullable', 'url', 'max:255'],
             'link_label' => ['nullable', 'string', 'max:80'],
         ], [

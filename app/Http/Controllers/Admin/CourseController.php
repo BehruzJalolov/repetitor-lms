@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Teacher;
+use App\Support\MediaStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -48,7 +49,7 @@ class CourseController extends Controller
         $data['slug'] = $this->uniqueSlug($data['title']);
 
         if ($request->hasFile('thumbnail')) {
-            $data['thumbnail'] = $request->file('thumbnail')->store('courses', 'public');
+            $data['thumbnail'] = MediaStorage::store($request->file('thumbnail'), 'courses', 'public');
         }
 
         $course = Course::create($data);
@@ -87,7 +88,7 @@ class CourseController extends Controller
 
         if ($request->hasFile('thumbnail')) {
             $this->deleteThumbnail($course);
-            $data['thumbnail'] = $request->file('thumbnail')->store('courses', 'public');
+            $data['thumbnail'] = MediaStorage::store($request->file('thumbnail'), 'courses', 'public');
         } elseif ($request->boolean('remove_thumbnail')) {
             $this->deleteThumbnail($course);
             $data['thumbnail'] = null;
@@ -111,7 +112,7 @@ class CourseController extends Controller
             }
         }
         foreach ($course->subscriptions as $subscription) {
-            Storage::disk('local')->delete($subscription->receipt_image);
+            MediaStorage::delete($subscription->receipt_image, 'local');
         }
         $this->deleteThumbnail($course);
 
@@ -127,7 +128,7 @@ class CourseController extends Controller
             'title' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:5000'],
             'price' => ['required', 'integer', 'min:0', 'max:100000000'],
-            'thumbnail' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'thumbnail' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
         ]);
 
         if ($request->user()->isTeacher()) {
@@ -156,7 +157,7 @@ class CourseController extends Controller
     private function deleteThumbnail(Course $course): void
     {
         if ($course->thumbnail) {
-            Storage::disk('public')->delete($course->thumbnail);
+            MediaStorage::delete($course->thumbnail, 'public');
         }
     }
 }

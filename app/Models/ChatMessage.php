@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\MediaStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 class ChatMessage extends Model
 {
@@ -29,20 +29,7 @@ class ChatMessage extends Model
 
     public function getImageUrlAttribute(): ?string
     {
-        if (! is_string($this->image_path) || $this->image_path === '') {
-            return null;
-        }
-
-        if (
-            str_starts_with($this->image_path, 'http://')
-            || str_starts_with($this->image_path, 'https://')
-            || str_starts_with($this->image_path, 'data:image/')
-            || str_starts_with($this->image_path, '/')
-        ) {
-            return $this->image_path;
-        }
-
-        return Storage::disk('public')->url($this->image_path);
+        return MediaStorage::url($this->image_path);
     }
 
     public function user(): BelongsTo

@@ -7,6 +7,7 @@ use App\Models\Course;
 use App\Models\Lesson;
 use App\Models\User;
 use App\Services\TelegramNotificationService;
+use App\Support\MediaStorage;
 use App\Support\ProfanityFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -235,20 +236,21 @@ class ChatController extends Controller
 
         $data = $request->validate([
             'message' => ['nullable', 'string', 'max:1000'],
-            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
             'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
             'course_id' => ['nullable', 'integer', 'exists:courses,id'],
             'lesson_id' => ['nullable', 'integer', 'exists:lessons,id'],
             'parent_id' => ['nullable', 'integer', 'exists:chat_messages,id'],
         ], [
             'message.max' => 'Xabar 1000 ta belgidan oshmasligi kerak.',
-            'image.image' => 'Yuklangan fayl rasm formatida bo\'lishi kerak.',
-            'image.max' => 'Rasm hajmi 5 MB dan oshmasligi kerak.',
+            'image.mimes' => 'Yuklangan fayl rasm formatida (JPG, PNG, WEBP, GIF) bo\'lishi kerak.',
+            'image.max' => 'Rasm hajmi 10 MB dan oshmasligi kerak.',
         ]);
 
         $hasImage = $request->hasFile('image');
-        if ($hasImage) {
-            abort_unless($user->isAdmin(), 403, 'Chatga faqat ustoz va admin rasm yubora oladi.');
+        $recipientId = $data['recipient_id'] ?? null;
+        if ($hasImage && ! $recipientId) {
+            abort_unless($user->isAdmin(), 403, 'Umumiy chatga faqat ustoz va admin rasm yubora oladi.');
         }
 
         $text = trim((string) ($data['message'] ?? ''));
@@ -308,7 +310,7 @@ class ChatController extends Controller
             }
         }
 
-        $imagePath = $hasImage ? $request->file('image')->store('chat-images', 'public') : null;
+        $imagePath = $hasImage ? MediaStorage::store($request->file('image'), 'chat-images', 'public') : null;
 
         $msg = ChatMessage::create([
             'user_id' => $user->id,
@@ -467,6 +469,10 @@ class ChatController extends Controller
         $user = $request->user();
 
         abort_unless($user->hasPermission('moderate_chat') || $chatMessage->user_id === $user->id, 403);
+
+        if ($chatMessage->image_path) {
+            MediaStorage::delete($chatMessage->image_path, 'public');
+        }
 
         $chatMessage->delete();
 

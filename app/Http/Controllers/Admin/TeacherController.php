@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Teacher;
 use App\Models\TeacherResult;
 use App\Models\User;
+use App\Support\MediaStorage;
 use App\Support\Phone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -54,7 +54,7 @@ class TeacherController extends Controller
         $data['position'] = ((int) Teacher::max('position')) + 1;
 
         if ($request->hasFile('photo')) {
-            $data['photo'] = $request->file('photo')->store('teachers', 'public');
+            $data['photo'] = MediaStorage::store($request->file('photo'), 'teachers', 'public');
         }
 
         $teacher = Teacher::create($data);
@@ -95,12 +95,12 @@ class TeacherController extends Controller
 
         if ($request->hasFile('photo')) {
             if ($teacher->photo) {
-                Storage::disk('public')->delete($teacher->photo);
+                MediaStorage::delete($teacher->photo, 'public');
             }
-            $data['photo'] = $request->file('photo')->store('teachers', 'public');
+            $data['photo'] = MediaStorage::store($request->file('photo'), 'teachers', 'public');
         } elseif ($request->boolean('remove_photo')) {
             if ($teacher->photo) {
-                Storage::disk('public')->delete($teacher->photo);
+                MediaStorage::delete($teacher->photo, 'public');
             }
             $data['photo'] = null;
         }
@@ -121,15 +121,15 @@ class TeacherController extends Controller
 
         foreach ($teacher->results as $result) {
             if ($result->student_photo) {
-                Storage::disk('public')->delete($result->student_photo);
+                MediaStorage::delete($result->student_photo, 'public');
             }
             if ($result->certificate_image) {
-                Storage::disk('public')->delete($result->certificate_image);
+                MediaStorage::delete($result->certificate_image, 'public');
             }
         }
 
         if ($teacher->photo) {
-            Storage::disk('public')->delete($teacher->photo);
+            MediaStorage::delete($teacher->photo, 'public');
         }
 
         if ($teacher->account) {
@@ -154,21 +154,21 @@ class TeacherController extends Controller
             'score' => ['required', 'string', 'max:100'],
             'achievement' => ['nullable', 'string', 'max:255'],
             'testimonial' => ['nullable', 'string', 'max:1000'],
-            'student_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
-            'certificate_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'student_photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
+            'certificate_image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
         ], [
             'student_name.required' => 'O\'quvchi ism-familiyasini kiriting.',
             'score.required' => 'Olgan bali yoki sertifikat darajasini kiriting (masalan: IELTS 8.0 yoki 189.0 ball).',
-            'student_photo.image' => 'O\'quvchi rasmi rasm formatida bo\'lishi kerak.',
-            'certificate_image.image' => 'Sertifikat rasmi rasm formatida bo\'lishi kerak.',
+            'student_photo.mimes' => 'O\'quvchi rasmi rasm formatida bo\'lishi kerak.',
+            'certificate_image.mimes' => 'Sertifikat rasmi rasm formatida bo\'lishi kerak.',
         ]);
 
         if ($request->hasFile('student_photo')) {
-            $data['student_photo'] = $request->file('student_photo')->store('teacher-results/students', 'public');
+            $data['student_photo'] = MediaStorage::store($request->file('student_photo'), 'teacher-results/students', 'public');
         }
 
         if ($request->hasFile('certificate_image')) {
-            $data['certificate_image'] = $request->file('certificate_image')->store('teacher-results/certificates', 'public');
+            $data['certificate_image'] = MediaStorage::store($request->file('certificate_image'), 'teacher-results/certificates', 'public');
         }
 
         $data['position'] = ((int) $teacher->results()->max('position')) + 1;
@@ -184,10 +184,10 @@ class TeacherController extends Controller
         abort_unless($result->teacher_id === $teacher->id, 404);
 
         if ($result->student_photo) {
-            Storage::disk('public')->delete($result->student_photo);
+            MediaStorage::delete($result->student_photo, 'public');
         }
         if ($result->certificate_image) {
-            Storage::disk('public')->delete($result->certificate_image);
+            MediaStorage::delete($result->certificate_image, 'public');
         }
 
         $result->delete();
@@ -229,7 +229,7 @@ class TeacherController extends Controller
             ],
             'telegram' => ['nullable', 'string', 'max:100'],
             'work_hours' => ['nullable', 'string', 'max:150'],
-            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
+            'photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
             'login_password' => ['nullable', 'string', 'min:8', 'max:100'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', Rule::in(array_keys(User::TEACHER_PERMISSIONS))],

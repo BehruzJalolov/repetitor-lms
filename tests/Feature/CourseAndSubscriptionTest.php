@@ -1111,4 +1111,80 @@ class CourseAndSubscriptionTest extends TestCase
             'is_pinned' => true,
         ]);
     }
+
+    public function test_uploaded_images_across_chat_news_courses_teachers_and_receipts_are_served_and_survive_disk_wipe(): void
+    {
+        Storage::fake('public');
+        Storage::fake('local');
+
+        $admin = User::factory()->admin()->create();
+        $student = User::factory()->create();
+
+        // 1. Course thumbnail upload
+        $this->actingAs($admin)->post(route('admin.courses.store'), [
+            'title' => 'Rasm Test Kursi',
+            'description' => 'Muqova rasmli kurs',
+            'price' => 150000,
+            'is_active' => '1',
+            'thumbnail' => UploadedFile::fake()->image('course-cover.jpg', 400, 300),
+        ])->assertRedirect();
+
+        $course = Course::where('title', 'Rasm Test Kursi')->firstOrFail();
+        $this->assertNotNull($course->thumbnail_url);
+        $this->assertStringStartsWith('/media/courses/', $course->thumbnail_url);
+
+        // 2. Teacher photo + TeacherResult student photo & certificate upload
+        $this->actingAs($admin)->post(route('admin.teachers.store'), [
+            'name' => 'Rasm Test Ustoz',
+            'subject' => 'Kimyo',
+            'experience_years' => 10,
+            'is_active' => '1',
+            'photo' => UploadedFile::fake()->image('teacher-avatar.png', 300, 300),
+        ])->assertRedirect();
+
+        $teacher = Teacher::where('name', 'Rasm Test Ustoz')->firstOrFail();
+        $this->assertStringStartsWith('/media/teachers/', $teacher->photo_url);
+
+        $this->actingAs($admin)->post(route('admin.teachers.results.store', $teacher), [
+            'student_name' => 'A\'lochi Talaba',
+            'score' => '189.0 ball',
+            'student_photo' => UploadedFile::fake()->image('student.jpg', 200, 200),
+            'certificate_image' => UploadedFile::fake()->image('cert.jpg', 600, 400),
+        ])->assertRedirect();
+
+        $result = $teacher->results()->firstOrFail();
+        $this->assertStringStartsWith('/media/teacher-results/students/', (string) $result->student_photo_url);
+        $this->assertStringStartsWith('/media/teacher-results/certificates/', (string) $result->certificate_url);
+
+        // 3. Announcement banner + Chat image upload
+        $chatResponse = $this->actingAs($admin)->postJson(route('chat.store'), [
+            'message' => 'Chatdagi rasm testi',
+            'image' => UploadedFile::fake()->image('chat-photo.jpg', 500, 400),
+        ])->assertOk();
+
+        $chatImageUrl = (string) $chatResponse->json('chat_message.image_url');
+        $this->assertStringStartsWith('/media/chat-images/', $chatImageUrl);
+
+        // 4. Student payment receipt upload
+        $this->actingAs($student)->post(route('subscriptions.store', $course), [
+            'receipt' => UploadedFile::fake()->image('receipt.jpg', 400, 600),
+        ])->assertRedirect();
+
+        $subscription = Subscription::where('user_id', $student->id)->where('course_id', $course->id)->firstOrFail();
+
+        // 5. Simulate Render ephemeral container disk wipe by deleting all files from both disks!
+        Storage::disk('public')->deleteDirectory('courses');
+        Storage::disk('public')->deleteDirectory('teachers');
+        Storage::disk('public')->deleteDirectory('teacher-results');
+        Storage::disk('public')->deleteDirectory('chat-images');
+        Storage::disk('local')->deleteDirectory('receipts');
+
+        // 6. All images STILL return 200 OK from the database backup (stored_media)!
+        $this->get($course->thumbnail_url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->get($teacher->photo_url)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get((string) $result->student_photo_url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->get((string) $result->certificate_url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->get($chatImageUrl)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->actingAs($admin)->get(route('admin.subscriptions.receipt', $subscription))->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+    }
 }

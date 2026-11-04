@@ -20,6 +20,7 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LessonController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MyCoursesController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StreamController;
@@ -29,6 +30,8 @@ use Illuminate\Support\Facades\Route;
 
 // Ochiq sahifalar
 Route::get('/', HomeController::class)->name('home');
+Route::get('/media/{path}', [MediaController::class, 'show'])->where('path', '.*')->name('media.show');
+Route::get('/storage/{path}', [MediaController::class, 'show'])->where('path', '.*');
 Route::get('/kurslar', [CourseController::class, 'index'])->name('courses.index');
 Route::get('/kurslar/{course:slug}', [CourseController::class, 'show'])->name('courses.show');
 Route::get('/ustozlar', [TeacherController::class, 'index'])->name('teachers.index');
