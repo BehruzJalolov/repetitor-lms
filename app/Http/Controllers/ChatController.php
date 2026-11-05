@@ -236,7 +236,7 @@ class ChatController extends Controller
 
         $data = $request->validate([
             'message' => ['nullable', 'string', 'max:1000'],
-            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,avif,jfif', 'max:10240'],
             'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
             'course_id' => ['nullable', 'integer', 'exists:courses,id'],
             'lesson_id' => ['nullable', 'integer', 'exists:lessons,id'],
@@ -432,7 +432,8 @@ class ChatController extends Controller
 
         // 1. Agar javob yozilgan bo'lsa va javob egasi Telegram ulangan bo'lsa, unga shaxsiy bildirishnoma yuboramiz
         if ($parent && $parent->user && $parent->user_id !== $sender->id && $parent->user->telegram_chat_id) {
-            $senderTitle = $sender->isAdmin() ? "👨‍🏫 Ustoz ({$sender->name})" : "👤 {$sender->name}";
+            $senderName = e($sender->name);
+            $senderTitle = $sender->isAdmin() ? "👨‍🏫 Ustoz ({$senderName})" : "👤 {$senderName}";
             $telegram->sendToChat(
                 (string) $parent->user->telegram_chat_id,
                 "💬 <b>Sizning xabaringizga javob yozildi!</b>\n\n"
@@ -468,7 +469,10 @@ class ChatController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        abort_unless($user->hasPermission('moderate_chat') || $chatMessage->user_id === $user->id, 403);
+        $canModerate = $user->hasPermission('moderate_chat')
+            && ($user->isSuperAdmin() || (! $chatMessage->user?->isAdmin() && $chatMessage->recipient_id === null));
+
+        abort_unless($canModerate || $chatMessage->user_id === $user->id, 403);
 
         if ($chatMessage->image_path) {
             MediaStorage::delete($chatMessage->image_path, 'public');

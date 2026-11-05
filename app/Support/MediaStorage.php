@@ -54,7 +54,7 @@ class MediaStorage
 
         try {
             if (Schema::hasTable('stored_media')) {
-                DB::table('stored_media')->where('path', $clean)->delete();
+                DB::table('stored_media')->where('path', $clean)->where('disk', $disk)->delete();
             }
         } catch (Throwable) {
         }
@@ -116,16 +116,16 @@ class MediaStorage
             // Agar diskda bor bo'lib, bazada hali zaxiralanmagan bo'lsa, avtomatik zaxiraga olamiz
             self::ensureBackedUp($clean, $disk, $mime, $binary);
 
-            return response($binary, 200, [
-                'Content-Type' => $mime,
-                'Cache-Control' => 'public, max-age=31536000, immutable',
-            ]);
+            return response($binary, 200, self::securityHeaders($mime, $disk));
         }
 
-        // Diskda topilmasa (masalan Render redeploy/restart bo'lganda), bazadan olib diskka ham qayta yozamiz
+        // Diskda topilmasa (masalan Render redeploy/restart bo'lganda), bazadan faqat shu diskka tegishli yozuvni olib qayta tiklaymiz
         try {
             if (Schema::hasTable('stored_media')) {
-                $record = DB::table('stored_media')->where('path', $clean)->first();
+                $record = DB::table('stored_media')
+                    ->where('path', $clean)
+                    ->where('disk', $disk)
+                    ->first();
 
                 if ($record && ! empty($record->contents)) {
                     $binary = base64_decode((string) $record->contents, true);
@@ -138,10 +138,7 @@ class MediaStorage
 
                         $mime = $record->mime_type ?: self::guessMimeType($clean);
 
-                        return response($binary, 200, [
-                            'Content-Type' => $mime,
-                            'Cache-Control' => 'public, max-age=31536000, immutable',
-                        ]);
+                        return response($binary, 200, self::securityHeaders($mime, $disk));
                     }
                 }
             }
@@ -149,6 +146,23 @@ class MediaStorage
         }
 
         abort(404);
+    }
+
+    /**
+     * Yuklangan media fayllar brauzerda ochilganda JavaScript ishga tushmasligi (Stored XSS himoyasi) uchun sarlavhalar.
+     *
+     * @return array<string, string>
+     */
+    private static function securityHeaders(string $mime, string $disk): array
+    {
+        return [
+            'Content-Type' => $mime,
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+            'Cache-Control' => $disk === 'public'
+                ? 'public, max-age=31536000, immutable'
+                : 'private, no-store, max-age=0',
+        ];
     }
 
     private static function normalizeRelativePath(string $path): string
@@ -209,7 +223,6 @@ class MediaStorage
             'png' => 'image/png',
             'webp' => 'image/webp',
             'gif' => 'image/gif',
-            'svg' => 'image/svg+xml',
             'avif' => 'image/avif',
             'bmp' => 'image/bmp',
             default => 'image/jpeg',

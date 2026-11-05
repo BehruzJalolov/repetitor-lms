@@ -59,14 +59,8 @@ PERSISTENT_KEY_FILE="/var/www/html/storage/app/private/.app_key"
 if [ -z "${APP_KEY:-}" ]; then
     if [ -f "${PERSISTENT_KEY_FILE}" ]; then
         export APP_KEY="$(cat "${PERSISTENT_KEY_FILE}")"
-    elif [ -n "${DB_URL:-}${DATABASE_URL:-}" ]; then
-        GENERATED_KEY="base64:$(printf '%s' "repetitor-lms-stable-key:${DB_URL:-${DATABASE_URL:-}}" | sha256sum | cut -c1-32 | base64)"
-        printf '%s' "${GENERATED_KEY}" > "${PERSISTENT_KEY_FILE}"
-        chmod 600 "${PERSISTENT_KEY_FILE}"
-        export APP_KEY="${GENERATED_KEY}"
     else
-        php artisan key:generate --force --no-interaction
-        GENERATED_KEY="$(grep '^APP_KEY=' .env | cut -d '=' -f2-)"
+        GENERATED_KEY="base64:$(head -c 32 /dev/urandom | base64)"
         printf '%s' "${GENERATED_KEY}" > "${PERSISTENT_KEY_FILE}"
         chmod 600 "${PERSISTENT_KEY_FILE}"
         export APP_KEY="${GENERATED_KEY}"
