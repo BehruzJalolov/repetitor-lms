@@ -33,14 +33,20 @@
         imageFile: null,
         imageName: '',
         sending: false,
+        polling: false,
         errorText: '',
         replyId: null,
         replyName: '',
         replyText: '',
+        latestUnreadDm: null,
         timer: null,
         init() {
             this.$nextTick(() => this.scrollToBottom());
-            this.timer = setInterval(() => this.fetchMessages(), 2500);
+            this.timer = setInterval(() => this.fetchMessages(), 2000);
+            window.addEventListener('focus', () => this.fetchMessages());
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) this.fetchMessages();
+            });
         },
         scrollToBottom() {
             const box = this.$refs.scrollBox;
@@ -61,22 +67,37 @@
             }
         },
         async fetchMessages() {
-            if (document.hidden) return;
+            if (document.hidden || this.polling) return;
+            this.polling = true;
             try {
-                const res = await fetch(this.pollUrl, {
-                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                const sep = this.pollUrl.includes('?') ? '&' : '?';
+                const res = await fetch(this.pollUrl + sep + '_t=' + Date.now(), {
+                    cache: 'no-store',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Cache-Control': 'no-cache',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
                 });
                 if (!res.ok) return;
                 const data = await res.json();
                 if (Array.isArray(data.messages)) {
                     const prevLastId = this.messages.length ? this.messages[this.messages.length - 1].id : 0;
                     const newLastId = data.messages.length ? data.messages[data.messages.length - 1].id : 0;
+                    const countChanged = data.messages.length !== this.messages.length;
                     this.messages = data.messages;
-                    if (newLastId !== prevLastId) {
+                    if (newLastId !== prevLastId || countChanged) {
                         this.$nextTick(() => this.scrollToBottom());
                     }
                 }
-            } catch (e) {}
+                if (data.latest_unread_dm !== undefined) {
+                    this.latestUnreadDm = data.latest_unread_dm;
+                }
+                window.dispatchEvent(new CustomEvent('chat-meta-updated', { detail: data }));
+            } catch (e) {
+            } finally {
+                this.polling = false;
+            }
         },
         async submitMessage() {
             const text = this.newMessage.trim();
@@ -94,6 +115,7 @@
 
                 const res = await fetch(this.storeUrl, {
                     method: 'POST',
+                    cache: 'no-store',
                     headers: {
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': this.csrf,
@@ -109,11 +131,13 @@
                     this.clearReply();
                     this.clearImage();
                     if (data.chat_message) {
-                        this.messages.push(data.chat_message);
+                        const exists = this.messages.some(m => m.id === data.chat_message.id);
+                        if (!exists) {
+                            this.messages.push(data.chat_message);
+                        }
                         this.$nextTick(() => this.scrollToBottom());
-                    } else {
-                        await this.fetchMessages();
                     }
+                    await this.fetchMessages();
                 }
             } catch (e) {
                 this.errorText = 'Aloqa xatosi. Qaytadan urinib ko\'ring.';
@@ -133,30 +157,41 @@
             this.replyText = '';
         }
      }"
-     class="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+     class="flex w-full max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl">
 
     {{-- Chat sarlavhasi --}}
-    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-5 py-3.5">
-        <div class="flex items-center gap-2.5">
-            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-100 text-base text-brand-700">💬</span>
-            <div>
-                <h3 class="text-sm font-extrabold text-slate-900">{{ $chatTitle ?? 'O\'quvchilar va Ustoz muloqot chati' }}</h3>
-                <p class="text-[11px] text-slate-500">🟢 Jonli (Real-time) chat · So'kinish va reklama ssilkalari avtomatik filtrlanadi</p>
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-3.5 py-3 sm:px-5 sm:py-3.5">
+        <div class="flex min-w-0 flex-1 items-center gap-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-base text-brand-700">💬</span>
+            <div class="min-w-0 flex-1">
+                <h3 class="break-words text-xs font-extrabold text-slate-900 sm:text-sm">{{ $chatTitle ?? 'O\'quvchilar va Ustoz muloqot chati' }}</h3>
+                <p class="break-words text-[10px] text-slate-500 sm:text-[11px]">🟢 Jonli (Real-time) chat · So'kinish va reklama ssilkalari avtomatik filtrlanadi</p>
             </div>
         </div>
-        <span class="badge bg-emerald-100 text-emerald-700" x-text="messages.length + ' ta xabar'">{{ $messages->count() }} ta xabar</span>
+        <span class="badge shrink-0 bg-emerald-100 text-[11px] text-emerald-700" x-text="messages.length + ' ta xabar'">{{ $messages->count() }} ta xabar</span>
+    </div>
+
+    {{-- Yangi shaxsiy (1-1 Lichka) xabar kelganda jonli bildirishnoma --}}
+    <div x-show="latestUnreadDm" x-cloak class="flex min-w-0 items-center justify-between gap-2 border-b border-rose-200 bg-rose-50 px-3.5 py-2 text-xs text-rose-900">
+        <div class="min-w-0 flex-1 truncate">
+            <span class="font-extrabold" x-text="'✉️ ' + (latestUnreadDm?.name || '') + ' sizga lichkaga yozdi:'"></span>
+            <span class="ml-1 text-rose-700" x-text="latestUnreadDm?.last_message || ''"></span>
+        </div>
+        <a :href="latestUnreadDm?.url || '#'" class="shrink-0 rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-rose-700">
+            Ochish →
+        </a>
     </div>
 
     {{-- Qadalgan (Pinned) xabarlar --}}
     @if (! empty($pinnedMessages) && $pinnedMessages->isNotEmpty())
-        <div class="border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs">
+        <div class="border-b border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs sm:px-4">
             @foreach ($pinnedMessages as $pin)
-                <div class="flex items-center justify-between gap-2 py-0.5">
-                    <p class="truncate text-amber-900">
+                <div class="flex min-w-0 items-center justify-between gap-2 py-0.5">
+                    <p class="min-w-0 flex-1 truncate text-amber-900">
                         <span class="font-extrabold">📌 Ustoz e'loni:</span> {{ $pin->message }}
                     </p>
                     @if ($user?->isAdmin())
-                        <form method="POST" action="{{ route('chat.pin', $pin) }}">
+                        <form method="POST" action="{{ route('chat.pin', $pin) }}" class="shrink-0">
                             @csrf
                             <button type="submit" class="text-[11px] font-bold text-amber-700 hover:underline">Olib tashlash</button>
                         </form>
@@ -167,7 +202,7 @@
     @endif
 
     {{-- Xabarlar ro'yxati (Real-time Alpine render) --}}
-    <div id="chat-scroll-box" x-ref="scrollBox" class="{{ $heightClass }} space-y-3.5 overflow-y-auto p-4 sm:p-5">
+    <div id="chat-scroll-box" x-ref="scrollBox" class="{{ $heightClass }} space-y-3.5 overflow-x-hidden overflow-y-auto p-3 sm:p-5">
         <template x-if="messages.length === 0">
             <div class="flex h-full flex-col items-center justify-center py-12 text-center text-slate-400">
                 <span class="text-4xl">💬</span>
@@ -177,15 +212,15 @@
         </template>
 
         <template x-for="m in messages" :key="m.id">
-            <div class="group flex items-start gap-3" :class="m.is_mine ? 'flex-row-reverse' : ''">
-                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-xs font-extrabold text-white shadow-sm"
+            <div class="group flex min-w-0 items-start gap-2.5 sm:gap-3" :class="m.is_mine ? 'flex-row-reverse' : ''">
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl text-xs font-extrabold text-white shadow-sm sm:h-9 sm:w-9"
                      :class="m.is_admin ? 'bg-gradient-to-br from-amber-500 to-orange-600 ring-2 ring-amber-300' : (m.is_mine ? 'bg-brand-600' : 'bg-slate-600')"
                      x-text="m.is_admin ? '👨‍🏫' : m.user_initial">
                 </div>
 
-                <div class="max-w-[82%] sm:max-w-[75%]">
+                <div class="min-w-0 max-w-[82%] sm:max-w-[75%]">
                     <div class="flex flex-wrap items-center gap-1.5" :class="m.is_mine ? 'justify-end' : ''">
-                        <span class="text-xs font-extrabold"
+                        <span class="truncate text-xs font-extrabold"
                               :class="m.is_admin ? 'text-amber-700' : 'text-slate-800'"
                               x-text="m.user_name"></span>
 
@@ -200,13 +235,13 @@
                         <span class="text-[10px] text-slate-400" x-text="m.time + ' · ' + m.date"></span>
                     </div>
 
-                    <div class="mt-1 rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-xs"
+                    <div class="mt-1 overflow-hidden rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-xs sm:px-4"
                          :class="m.is_admin ? 'border border-amber-200 bg-amber-50/70 text-slate-900' : (m.is_mine ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800')">
 
                         <template x-if="m.parent_id">
-                            <div class="mb-1.5 rounded-lg border-l-2 px-2.5 py-1 text-xs"
+                            <div class="mb-1.5 min-w-0 rounded-lg border-l-2 px-2.5 py-1 text-xs"
                                  :class="m.is_mine && !m.is_admin ? 'border-white/60 bg-white/15 text-white/90' : 'border-brand-500 bg-white/80 text-slate-600'">
-                                <p class="font-bold" x-text="m.parent_user"></p>
+                                <p class="truncate font-bold" x-text="m.parent_user"></p>
                                 <p class="truncate opacity-85" x-text="m.parent_excerpt"></p>
                             </div>
                         </template>
@@ -217,7 +252,7 @@
                             </a>
                         </template>
 
-                        <p class="whitespace-pre-line break-words" x-text="m.message"></p>
+                        <p class="whitespace-pre-line break-words [overflow-wrap:anywhere]" x-text="m.message"></p>
 
                         <template x-if="m.links && m.links.length > 0">
                             <div class="mt-2 flex flex-wrap gap-1.5 border-t border-amber-200/70 pt-2">
@@ -225,10 +260,10 @@
                                     <a :href="lnk.url"
                                        target="_blank"
                                        rel="noopener"
-                                       class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition hover:bg-brand-700">
-                                        <span>🔗</span>
-                                        <span x-text="lnk.label"></span>
-                                        <span>↗</span>
+                                       class="inline-flex max-w-full items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition hover:bg-brand-700">
+                                        <span class="shrink-0">🔗</span>
+                                        <span class="truncate" x-text="lnk.label"></span>
+                                        <span class="shrink-0">↗</span>
                                     </a>
                                 </template>
                             </div>
@@ -236,7 +271,7 @@
                     </div>
 
                     {{-- Amallar: Javob berish, Shaxsiyga yozish, Pin, O'chirish, Bloklash --}}
-                    <div class="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-400" :class="m.is_mine ? 'justify-end' : ''">
+                    <div class="mt-1 flex flex-wrap items-center gap-2.5 text-[11px] text-slate-400 sm:gap-3" :class="m.is_mine ? 'justify-end' : ''">
                         @unless ($readOnly)
                             <button type="button"
                                     @click="setReply(m.id, m.user_name, m.message)"
@@ -282,7 +317,7 @@
     </div>
 
     {{-- Xabar yozish formasi --}}
-    <div class="border-t border-slate-100 bg-slate-50 p-3.5 sm:p-4">
+    <div class="border-t border-slate-100 bg-slate-50 p-2.5 sm:p-4">
         @if ($readOnly)
             <div class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-center text-xs font-bold text-indigo-800">
                 🕵️‍♂️ Maxfiy kuzatuv rejimi — ushbu 1-1 yozishmani kuzatayotganingiz o'quvchilarga ham, ustozlarga ham ko'rinmaydi.
@@ -292,25 +327,25 @@
                 🔇 Siz chat qoidalarini buzganingiz sababli ustoz tomonidan yozishdan cheklangansiz.
             </div>
         @else
-            <div x-show="errorText" x-cloak class="mb-2.5 flex items-center justify-between gap-2 rounded-xl bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700">
-                <span x-text="errorText"></span>
-                <button type="button" @click="errorText = ''" class="font-bold text-red-400 hover:text-red-700">✕</button>
+            <div x-show="errorText" x-cloak class="mb-2.5 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700">
+                <span class="min-w-0 flex-1 break-words" x-text="errorText"></span>
+                <button type="button" @click="errorText = ''" class="shrink-0 font-bold text-red-400 hover:text-red-700">✕</button>
             </div>
 
-            <div x-show="replyId" x-cloak class="mb-2.5 flex items-center justify-between gap-2 rounded-xl bg-brand-50 px-3.5 py-2 text-xs text-brand-900">
-                <div class="min-w-0 truncate">
+            <div x-show="replyId" x-cloak class="mb-2.5 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-brand-50 px-3.5 py-2 text-xs text-brand-900">
+                <div class="min-w-0 flex-1 truncate">
                     <span class="font-extrabold" x-text="'↩️ ' + replyName + ' ga javob:'"></span>
                     <span class="ml-1 text-slate-600" x-text="replyText"></span>
                 </div>
                 <button type="button" @click="clearReply()" class="shrink-0 font-bold text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
-            <div x-show="imageName" x-cloak class="mb-2.5 flex items-center justify-between gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
-                <span class="truncate" x-text="'📷 Tanlangan rasm: ' + imageName"></span>
+            <div x-show="imageName" x-cloak class="mb-2.5 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                <span class="min-w-0 flex-1 truncate" x-text="'📷 Tanlangan rasm: ' + imageName"></span>
                 <button type="button" @click="clearImage()" class="shrink-0 font-bold text-amber-600 hover:text-amber-900">✕ Olib tashlash</button>
             </div>
 
-            <form method="POST" action="{{ route('chat.store') }}" enctype="multipart/form-data" @submit.prevent="submitMessage()" class="flex items-end gap-2">
+            <form method="POST" action="{{ route('chat.store') }}" enctype="multipart/form-data" @submit.prevent="submitMessage()" class="flex min-w-0 items-end gap-1.5 sm:gap-2">
                 @csrf
                 @if ($recipientId)
                     <input type="hidden" name="recipient_id" value="{{ $recipientId }}">
@@ -343,12 +378,12 @@
                            type="text"
                            maxlength="1000"
                            placeholder="{{ $user?->isAdmin() ? 'E\'lon, ssilka (https://...) yoki xabar yozing...' : 'Dars bo\'yicha savol yoki fikringizni yozing...' }}"
-                           class="input !py-2.5 text-sm">
+                           class="input min-w-0 !px-3 !py-2.5 text-sm sm:!px-4">
                 </div>
                 <button type="submit"
                         id="send-chat-message"
                         :disabled="sending"
-                        class="btn-primary shrink-0 !px-3.5 !py-2.5 text-xs sm:!px-5 sm:text-sm disabled:opacity-60">
+                        class="btn-primary shrink-0 !px-3 !py-2.5 text-xs sm:!px-5 sm:text-sm disabled:opacity-60">
                     <span x-text="sending ? '...' : 'Yuborish ➤'">Yuborish ➤</span>
                 </button>
             </form>

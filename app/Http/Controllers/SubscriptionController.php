@@ -55,7 +55,7 @@ class SubscriptionController extends Controller
         }
 
         $formattedPrice = number_format($course->price, 0, '', ' ');
-        $telegram->send(
+        $telegram->sendAsync(
             "🧾 <b>Yangi to'lov cheki yuborildi!</b>\n\n"
             ."👤 <b>O'quvchi:</b> {$user->name} ({$user->phone})\n"
             ."📚 <b>Kurs:</b> {$course->title}\n"

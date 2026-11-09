@@ -1,9 +1,10 @@
-<header x-data="{ open: false, scrolled: false }"
+<header x-data="{ open: false, scrolled: false, unreadChat: {{ (int) ($unreadChatCount ?? 0) }} }"
         @scroll.window="scrolled = window.scrollY > 10"
+        @chat-meta-updated.window="if ($event.detail && typeof $event.detail.unread_dm_total === 'number') { unreadChat = $event.detail.unread_dm_total; }"
         :class="scrolled ? 'shadow-md shadow-slate-900/5' : ''"
         class="sticky top-0 z-40 border-b border-slate-200/60 bg-white/80 backdrop-blur-xl transition-shadow">
     <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" aria-label="Asosiy menyu">
-        @php $siteName = \App\Models\Setting::get('site_name', 'RepetitorLMS'); @endphp
+        @php $siteName = $siteName ?? \App\Models\Setting::get('site_name', 'RepetitorLMS'); @endphp
         <a href="{{ route('home') }}" id="nav-logo" class="flex items-center gap-2.5">
             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-accent-500 text-lg font-extrabold text-white shadow-lg shadow-brand-500/30">{{ mb_strtoupper(mb_substr((string) $siteName, 0, 1)) }}</span>
             <span class="text-lg font-extrabold tracking-tight text-slate-900">{{ $siteName }}</span>
@@ -19,9 +20,10 @@
                     <a href="{{ route('streams.index') }}" class="btn-ghost {{ request()->routeIs('streams.*') ? 'text-red-600 bg-red-50' : 'text-red-600' }}">🔴 Jonli efir</a>
                     <a href="{{ route('chat.index') }}" class="btn-ghost {{ request()->routeIs('chat.*') ? 'text-brand-600 bg-brand-50' : '' }}">
                         <span>💬 Chat</span>
-                        @if (($unreadChatCount ?? 0) > 0)
-                            <span class="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white">{{ $unreadChatCount }}</span>
-                        @endif
+                        <span x-show="unreadChat > 0"
+                              x-text="unreadChat"
+                              style="{{ ($unreadChatCount ?? 0) > 0 ? '' : 'display: none;' }}"
+                              class="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white">{{ $unreadChatCount ?? 0 }}</span>
                     </a>
                 @endif
                 <a href="{{ route('my-courses') }}" class="btn-ghost {{ request()->routeIs('my-courses') ? 'text-brand-600 bg-brand-50' : '' }}">Mening kurslarim</a>
@@ -69,7 +71,13 @@
         @auth
             @if (auth()->user()->hasActiveSubscription())
                 <a href="{{ route('streams.index') }}" class="block rounded-lg px-3 py-2.5 font-bold text-red-600 hover:bg-red-50">🔴 Jonli efirlar</a>
-                <a href="{{ route('chat.index') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">💬 O'quvchilar chati</a>
+                <a href="{{ route('chat.index') }}" class="flex items-center justify-between rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">
+                    <span>💬 O'quvchilar chati</span>
+                    <span x-show="unreadChat > 0"
+                          x-text="unreadChat"
+                          style="{{ ($unreadChatCount ?? 0) > 0 ? '' : 'display: none;' }}"
+                          class="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-extrabold leading-none text-white">{{ $unreadChatCount ?? 0 }}</span>
+                </a>
             @endif
             <a href="{{ route('my-courses') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Mening kurslarim</a>
             <a href="{{ route('profile.edit') }}" class="block rounded-lg px-3 py-2.5 font-medium text-slate-700 hover:bg-brand-50">Profil sozlamalari</a>

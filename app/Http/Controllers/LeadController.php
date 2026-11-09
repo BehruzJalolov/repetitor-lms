@@ -30,7 +30,7 @@ class LeadController extends Controller
         $lead->load('course');
 
         $courseTitle = $lead->course?->title ?? 'Umumiy konsultatsiya';
-        $telegram->send(
+        $telegram->sendAsync(
             "📞 <b>Yangi murojaat (Bepul konsultatsiya)!</b>\n\n"
             ."👤 <b>Ism:</b> {$lead->name}\n"
             ."📱 <b>Telefon:</b> {$lead->phone}\n"

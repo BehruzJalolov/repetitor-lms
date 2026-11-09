@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendTelegramMessageJob;
 use App\Models\Course;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Cache;
@@ -46,6 +47,37 @@ class TelegramNotificationService
         }
 
         return $this->sendToChat((string) $chatId, $message);
+    }
+
+    /**
+     * Bildirishnomani foydalanuvchi so'rovini ushlab qolmasdan (asinxron / javobdan keyin) yuboradi.
+     */
+    public function sendAsync(string $message): void
+    {
+        $this->dispatchJob(new SendTelegramMessageJob($message));
+    }
+
+    /**
+     * Shaxsiy/guruh chatiga xabarni asinxron tarzda yuboradi.
+     *
+     * @param  array<int, array<int, array<string, string>>>|null  $inlineKeyboard
+     */
+    public function sendToChatAsync(string|int $chatId, string $message, ?array $inlineKeyboard = null): void
+    {
+        $this->dispatchJob(new SendTelegramMessageJob($message, (string) $chatId, $inlineKeyboard));
+    }
+
+    private function dispatchJob(SendTelegramMessageJob $job): void
+    {
+        $driver = (string) config('queue.default', 'database');
+
+        if (in_array($driver, ['redis', 'sqs', 'beanstalkd'], true)) {
+            dispatch($job);
+
+            return;
+        }
+
+        dispatch($job)->afterResponse();
     }
 
     /**

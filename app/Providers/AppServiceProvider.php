@@ -2,9 +2,16 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\HomeController;
 use App\Models\ChatMessage;
+use App\Models\Course;
 use App\Models\Lead;
+use App\Models\Lesson;
+use App\Models\Setting;
 use App\Models\Subscription;
+use App\Models\Teacher;
+use App\Models\User;
+use App\Services\ChatService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
@@ -28,6 +35,21 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
         }
+
+        // Kurs, dars, ustoz yoki foydalanuvchi o'zgarganda bosh sahifa statistikasi keshini yangilash
+        $flushHomeStats = static fn () => HomeController::flushCache();
+        Course::saved($flushHomeStats);
+        Course::deleted($flushHomeStats);
+        Lesson::saved($flushHomeStats);
+        Lesson::deleted($flushHomeStats);
+        Teacher::saved($flushHomeStats);
+        Teacher::deleted($flushHomeStats);
+        User::created($flushHomeStats);
+        User::deleted($flushHomeStats);
+
+        $bumpSubCache = static fn () => User::bumpSubscriptionCacheVersion();
+        Subscription::saved($bumpSubCache);
+        Subscription::deleted($bumpSubCache);
 
         // Admin yon panelidagi "kutilayotgan cheklar", "yangi murojaatlar" va "o'qilmagan chat xabarlari" soni
         View::composer('layouts.admin', function ($view) {
@@ -70,28 +92,13 @@ class AppServiceProvider extends ServiceProvider
             $unreadChatCount = 0;
 
             if ($user && $user->hasActiveSubscription()) {
-                $lastSeenId = (int) Cache::get('chat_last_seen_id:'.$user->id, 0);
-                $unreadChatCount = ChatMessage::where('id', '>', $lastSeenId)
-                    ->where('user_id', '!=', $user->id)
-                    ->when($user->isTeacher(), fn ($q) => $q->whereNull('recipient_id'))
-                    ->when(! $user->isAdmin(), function ($q) use ($user) {
-                        $subscribedCourseIds = $user->subscriptions()
-                            ->where('status', 'approved')
-                            ->where(fn ($sq) => $sq->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-                            ->pluck('course_id');
-
-                        $q->where(function ($sub) use ($user, $subscribedCourseIds) {
-                            $sub->where('recipient_id', $user->id)
-                                ->orWhere(function ($pub) use ($subscribedCourseIds) {
-                                    $pub->whereNull('recipient_id')
-                                        ->where(fn ($c) => $c->whereNull('course_id')->orWhereIn('course_id', $subscribedCourseIds));
-                                });
-                        });
-                    })
-                    ->count();
+                $unreadChatCount = app(ChatService::class)->unreadCountForUser($user);
             }
 
-            $view->with('unreadChatCount', $unreadChatCount);
+            $view->with([
+                'unreadChatCount' => $unreadChatCount,
+                'siteName' => Setting::get('site_name', 'RepetitorLMS'),
+            ]);
         });
     }
 }

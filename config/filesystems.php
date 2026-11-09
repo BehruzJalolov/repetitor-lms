@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Media Database Backup (Ephemeral Containers vs Cloud Object Storage)
+    |--------------------------------------------------------------------------
+    |
+    | Render kabi bulutli konteynerlarda lokal disk qayta ishga tushganda
+    | tozalanib ketmasligi uchun rasmlar `stored_media` jadvalida zaxiralanadi.
+    | S3 / Cloudflare R2 ulanganda yoki MEDIA_DB_BACKUP=false qilinganda o'chiriladi.
+    |
+    */
+
+    'media_db_backup' => env('MEDIA_DB_BACKUP', true),
+    'media_db_backup_max_bytes' => (int) env('MEDIA_DB_BACKUP_MAX_BYTES', 5 * 1024 * 1024),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |

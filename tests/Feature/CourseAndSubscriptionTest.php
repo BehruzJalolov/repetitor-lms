@@ -1015,11 +1015,20 @@ class CourseAndSubscriptionTest extends TestCase
             ->assertOk()
             ->assertJsonMissing(['message' => 'Vali, 5-masalani qanday yechding?']);
 
-        // 3. Student B sees the 1-1 message in their DM with Student A
+        // 2b. While Student B is in general chat, polling immediately delivers live unread DM alert & contact badge without page refresh
+        $this->actingAs($studentB)
+            ->getJson(route('chat.messages'))
+            ->assertOk()
+            ->assertJsonPath('unread_dm_total', 1)
+            ->assertJsonPath('latest_unread_dm.id', $studentA->id)
+            ->assertJsonPath('latest_unread_dm.unread_count', 1);
+
+        // 3. Student B sees the 1-1 message in their DM with Student A, and unread count resets to 0
         $this->actingAs($studentB)
             ->getJson(route('chat.messages', ['recipient_id' => $studentA->id]))
             ->assertOk()
-            ->assertJsonFragment(['message' => 'Vali, 5-masalani qanday yechding?']);
+            ->assertJsonFragment(['message' => 'Vali, 5-masalani qanday yechding?'])
+            ->assertJsonPath('unread_dm_total', 0);
 
         // 4. Teacher CANNOT access 1-1 student DMs or Super Admin spy mode
         $this->actingAs($teacherUser)

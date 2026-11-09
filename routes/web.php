@@ -62,7 +62,7 @@ Route::middleware('auth')->group(function () {
 
     // O'quvchilar va Ustoz muloqot chati
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
-    Route::get('/chat/xabarlar', [ChatController::class, 'messages'])->middleware('throttle:60,1,chat_messages')->name('chat.messages');
+    Route::get('/chat/xabarlar', [ChatController::class, 'messages'])->middleware('throttle:180,1,chat_messages')->name('chat.messages');
     Route::post('/chat', [ChatController::class, 'store'])->middleware('throttle:20,1,chat_store')->name('chat.store');
     Route::delete('/chat/{chatMessage}', [ChatController::class, 'destroy'])->middleware('throttle:30,1,chat_destroy')->name('chat.destroy');
     Route::post('/chat/{chatMessage}/pin', [ChatController::class, 'togglePin'])->middleware('throttle:30,1,chat_pin')->name('chat.pin');

@@ -38,9 +38,9 @@
         @endif
     </div>
 
-    <div class="grid gap-6 lg:grid-cols-3">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {{-- CHAP TOMON: JONLI VIDEO EFIR XONASI --}}
-        <div class="lg:col-span-2"
+        <div class="min-w-0 lg:col-span-2"
              x-data="{
                  localCamOpen: false,
                  camError: '',
@@ -147,7 +147,7 @@
         </div>
 
         {{-- O'NG TOMON: JONLI EFIR CHATI --}}
-        <div class="lg:col-span-1">
+        <div class="min-w-0 lg:col-span-1">
             @include('partials.chat-box', [
                 'courseId' => $stream->course_id,
                 'lessonId' => null,

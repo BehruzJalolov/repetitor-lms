@@ -6,18 +6,20 @@ use App\Models\ChatMessage;
 use App\Models\Course;
 use App\Models\Lesson;
 use App\Models\User;
-use App\Services\TelegramNotificationService;
+use App\Services\ChatService;
 use App\Support\MediaStorage;
 use App\Support\ProfanityFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class ChatController extends Controller
 {
+    public function __construct(
+        private ChatService $chatService
+    ) {}
+
     public function index(Request $request): View|RedirectResponse
     {
         /** @var User $user */
@@ -38,7 +40,7 @@ class ChatController extends Controller
             $subscribedCourseIds = $user->subscriptions()
                 ->where('status', 'approved')
                 ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-                ->pluck('course_id');
+                ->select('course_id');
 
             $courses = $coursesQuery->whereIn('id', $subscribedCourseIds)->get();
         }
@@ -97,63 +99,27 @@ class ChatController extends Controller
 
         $messages = $query->latest()->limit(80)->get()->reverse()->values();
 
-        // O'quvchilar uchun 1-1 shaxsiy yozishma ("Lichka") kontaktlari (Ustozlarga ko'rinmaydi)
-        $dmContacts = collect();
-        if (! $user->isAdmin()) {
-            $dmContacts = User::where('role', 'student')
-                ->where('id', '!=', $user->id)
-                ->where(function ($q) use ($user) {
-                    $q->whereHas('subscriptions', fn ($sq) => $sq->where('status', 'approved'))
-                        ->orWhereIn('id', ChatMessage::where('recipient_id', $user->id)->pluck('user_id'))
-                        ->orWhereIn('id', ChatMessage::where('user_id', $user->id)->whereNotNull('recipient_id')->pluck('recipient_id'));
-                })
-                ->orderBy('name')
-                ->limit(30)
-                ->get(['id', 'name']);
+        if (! $spyPair) {
+            if ($dmPeer) {
+                $this->chatService->markDmSeen($user, $dmPeer->id);
+            } else {
+                $this->chatService->markChatSeen($user);
+            }
         }
+
+        // O'quvchilar uchun 1-1 shaxsiy yozishma ("Lichka") kontaktlari (Ustozlarga ko'rinmaydi)
+        $dmContacts = ! $user->isAdmin()
+            ? $this->chatService->buildDmContacts($user)
+            : collect();
 
         // Bosh Admin uchun o'quvchilar o'rtasidagi 1-1 shaxsiy yozishmalarni sirli kuzatish ro'yxati
-        $spyConversations = collect();
-        if ($user->isSuperAdmin()) {
-            $rawDms = ChatMessage::with(['user:id,name', 'recipient:id,name'])
-                ->whereNotNull('recipient_id')
-                ->latest()
-                ->limit(200)
-                ->get();
-
-            $grouped = [];
-            foreach ($rawDms as $dm) {
-                if (! $dm->user || ! $dm->recipient) {
-                    continue;
-                }
-                $minId = min($dm->user_id, $dm->recipient_id);
-                $maxId = max($dm->user_id, $dm->recipient_id);
-                $pairKey = $minId.'_'.$maxId;
-
-                if (! isset($grouped[$pairKey])) {
-                    $first = $dm->user_id === $minId ? $dm->user : $dm->recipient;
-                    $second = $dm->user_id === $minId ? $dm->recipient : $dm->user;
-                    $grouped[$pairKey] = [
-                        'u1' => $first,
-                        'u2' => $second,
-                        'last_message' => Str::limit($dm->message, 45),
-                        'last_time' => $dm->created_at->format('H:i · d.m'),
-                        'count' => 0,
-                    ];
-                }
-                $grouped[$pairKey]['count']++;
-            }
-
-            $spyConversations = collect(array_values($grouped));
-        }
+        $spyConversations = $user->isSuperAdmin()
+            ? $this->chatService->buildSpyConversations()
+            : collect();
 
         $bannedUsers = $user->hasPermission('moderate_chat')
             ? User::where('is_chat_banned', true)->where('role', 'student')->orderBy('name')->get(['id', 'name', 'phone'])
             : collect();
-
-        if (! $spyPair) {
-            $this->markChatSeen($user);
-        }
 
         return view('pages.chat', compact(
             'courses',
@@ -188,40 +154,62 @@ class ChatController extends Controller
             $messages = $query->latest()->limit(80)->get()->reverse()->values()
                 ->map(fn (ChatMessage $m) => self::formatMessage($m, $user));
 
-            return response()->json(['messages' => $messages]);
+            return response()->json([
+                'messages' => $messages,
+                'spy_conversations' => $this->chatService->buildSpyConversations()->values(),
+            ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         }
+
+        $activePeerId = null;
 
         if ($request->filled('recipient_id')) {
             abort_if($user->isTeacher(), 403);
             abort_unless($user->hasActiveSubscription(), 403);
             $peerId = (int) $request->query('recipient_id');
+            $activePeerId = $peerId;
 
             $query->where(function ($q) use ($user, $peerId) {
                 $q->where(fn ($sq) => $sq->where('user_id', $user->id)->where('recipient_id', $peerId))
                     ->orWhere(fn ($sq) => $sq->where('user_id', $peerId)->where('recipient_id', $user->id));
             });
+
+            $this->chatService->markDmSeen($user, $peerId);
         } elseif ($request->filled('lesson_id')) {
             $lesson = Lesson::with('course')->findOrFail((int) $request->query('lesson_id'));
             abort_unless($lesson->is_free || $user->hasAccessTo($lesson->course), 403);
             $query->whereNull('recipient_id')->where('lesson_id', $lesson->id);
+            $this->chatService->markChatSeen($user);
         } elseif ($request->filled('course_id')) {
             $course = Course::findOrFail((int) $request->query('course_id'));
             abort_unless($user->hasActiveSubscription() && $user->hasAccessTo($course), 403);
             $query->whereNull('recipient_id')->where('course_id', $course->id);
+            $this->chatService->markChatSeen($user);
         } else {
             abort_unless($user->hasActiveSubscription(), 403);
             $query->whereNull('recipient_id')->whereNull('course_id');
+            $this->chatService->markChatSeen($user);
         }
 
         $messages = $query->latest()->limit(80)->get()->reverse()->values()
             ->map(fn (ChatMessage $m) => self::formatMessage($m, $user));
 
-        $this->markChatSeen($user);
+        $dmContacts = ! $user->isAdmin()
+            ? $this->chatService->buildDmContacts($user)
+            : collect();
 
-        return response()->json(['messages' => $messages]);
+        $latestUnreadDm = $dmContacts
+            ->first(fn (array $c) => $c['unread_count'] > 0 && $c['id'] !== $activePeerId);
+
+        return response()->json([
+            'messages' => $messages,
+            'dm_contacts' => $dmContacts->values(),
+            'unread_dm_total' => (int) $dmContacts->sum('unread_count'),
+            'latest_unread_dm' => $latestUnreadDm,
+            'spy_conversations' => $user->isSuperAdmin() ? $this->chatService->buildSpyConversations()->values() : [],
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 
-    public function store(Request $request, TelegramNotificationService $telegram): JsonResponse|RedirectResponse
+    public function store(Request $request): JsonResponse|RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -272,7 +260,6 @@ class ChatController extends Controller
             }
         }
 
-        $recipientId = $data['recipient_id'] ?? null;
         $courseId = $data['course_id'] ?? null;
         $lessonId = $data['lesson_id'] ?? null;
         $parentId = $data['parent_id'] ?? null;
@@ -281,7 +268,6 @@ class ChatController extends Controller
         $lesson = null;
 
         if ($recipientId) {
-            // 1-1 shaxsiy yozishmalar ("Lichka") faqat kurs sotib olgan o'quvchilar o'rtasida ishlaydi
             abort_if($user->isTeacher(), 403);
             abort_unless($user->hasActiveSubscription(), 403);
             $recipient = User::where('role', 'student')
@@ -323,28 +309,21 @@ class ChatController extends Controller
         ]);
 
         $msg->load(['user:id,name,role,is_chat_banned', 'recipient:id,name', 'parent.user:id,name', 'lesson:id,title']);
-        $this->markChatSeen($user);
 
         if ($recipient) {
-            if ($recipient->telegram_chat_id) {
-                $telegram->sendToChat(
-                    (string) $recipient->telegram_chat_id,
-                    "✉️ <b>Sizga yangi shaxsiy xabar keldi!</b>\n\n"
-                    .'👤 <b>Kimdan:</b> '.e($user->name)."\n"
-                    .'💬 <b>Xabar:</b> <i>«'.e(Str::limit($msg->message, 200)).'»</i>',
-                    [[['text' => '✉️ Shaxsiy chatni ochish', 'url' => route('chat.index', ['dm' => $user->id])]]]
-                );
-            }
+            $this->chatService->markDmSeen($user, $recipient->id);
         } else {
-            $this->sendChatNotifications($telegram, $msg, $user, $course, $lesson, $parent);
+            $this->chatService->markChatSeen($user);
         }
+
+        $this->chatService->notifyNewMessage($msg, $user, $recipient, $course, $lesson, $parent);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'ok' => true,
                 'id' => $msg->id,
                 'chat_message' => self::formatMessage($msg, $user),
-            ]);
+            ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         }
 
         return back()->with('success', 'Xabar yuborildi.');
@@ -355,112 +334,7 @@ class ChatController extends Controller
      */
     public static function formatMessage(ChatMessage $m, ?User $viewer = null): array
     {
-        return [
-            'id' => $m->id,
-            'user_id' => $m->user_id,
-            'is_mine' => $viewer !== null && $m->user_id === $viewer->id,
-            'user_name' => $m->user?->name ?? 'O\'quvchi',
-            'user_initial' => mb_strtoupper(mb_substr($m->user?->name ?? 'O', 0, 1)),
-            'is_admin' => (bool) $m->user?->isAdmin(),
-            'is_banned' => (bool) $m->user?->is_chat_banned,
-            'message' => $m->message,
-            'image_url' => $m->image_url,
-            'links' => $m->user?->isAdmin() ? self::extractLinks((string) $m->message) : [],
-            'is_pinned' => (bool) $m->is_pinned,
-            'parent_id' => $m->parent_id,
-            'parent_user' => $m->parent?->user?->name ?? 'O\'quvchi',
-            'parent_excerpt' => $m->parent ? Str::limit($m->parent->message, 80) : null,
-            'lesson_title' => $m->lesson?->title,
-            'time' => $m->created_at->format('H:i'),
-            'date' => $m->created_at->format('d.m'),
-            'can_delete' => $viewer !== null && ($viewer->hasPermission('moderate_chat') || $m->user_id === $viewer->id),
-            'can_dm' => $viewer !== null && ! $viewer->isAdmin() && $m->user_id !== $viewer->id && ! $m->user?->isAdmin() && $m->recipient_id === null,
-            'dm_url' => $m->user_id ? route('chat.index', ['dm' => $m->user_id]) : null,
-            'pin_url' => route('chat.pin', $m),
-            'ban_url' => $m->user ? route('chat.ban', $m->user) : null,
-            'delete_url' => route('chat.destroy', $m),
-        ];
-    }
-
-    /**
-     * Ustoz/Admin xabari ichidagi URL yoki t.me havolalarni ajratib oladi.
-     *
-     * @return list<array{url: string, label: string}>
-     */
-    private static function extractLinks(string $text): array
-    {
-        if ($text === '') {
-            return [];
-        }
-
-        preg_match_all('~(?:https?://|t\.me/)[^\s<>"\']+~iu', $text, $matches);
-        $links = [];
-
-        foreach (array_unique($matches[0] ?? []) as $raw) {
-            $clean = rtrim($raw, '.,;:!?)');
-            $href = str_starts_with(strtolower($clean), 'http') ? $clean : 'https://'.$clean;
-            $links[] = [
-                'url' => $href,
-                'label' => Str::limit(preg_replace('~^https?://~i', '', $clean) ?? $clean, 40),
-            ];
-        }
-
-        return $links;
-    }
-
-    private function markChatSeen(User $user): void
-    {
-        $latestId = (int) ChatMessage::max('id');
-        Cache::forever('chat_last_seen_id:'.$user->id, $latestId);
-    }
-
-    private function sendChatNotifications(
-        TelegramNotificationService $telegram,
-        ChatMessage $msg,
-        User $sender,
-        ?Course $course,
-        ?Lesson $lesson,
-        ?ChatMessage $parent
-    ): void {
-        $roomLabel = $lesson
-            ? "{$course?->title} — {$lesson->title}"
-            : ($course ? $course->title : 'Umumiy savol-javob');
-
-        $chatUrl = $course
-            ? route('chat.index', ['course' => $course->slug])
-            : route('chat.index');
-
-        // 1. Agar javob yozilgan bo'lsa va javob egasi Telegram ulangan bo'lsa, unga shaxsiy bildirishnoma yuboramiz
-        if ($parent && $parent->user && $parent->user_id !== $sender->id && $parent->user->telegram_chat_id) {
-            $senderTitle = $sender->isAdmin() ? "👨‍🏫 Ustoz ({$sender->name})" : "👤 {$sender->name}";
-            $telegram->sendToChat(
-                (string) $parent->user->telegram_chat_id,
-                "💬 <b>Sizning xabaringizga javob yozildi!</b>\n\n"
-                ."{$senderTitle}:\n"
-                .'<i>«'.e(Str::limit($msg->message, 200))."»</i>\n\n"
-                .'📚 <b>Guruh:</b> '.e((string) $roomLabel),
-                [[['text' => '💬 Chatni ochish va javob berish', 'url' => $chatUrl]]]
-            );
-        }
-
-        // 2. Agar o'quvchi yozgan bo'lsa, ustozga va adminga Telegram orqali darhol xabar yuboramiz
-        if (! $sender->isAdmin()) {
-            $notifText = "💬 <b>Chatda yangi xabar!</b>\n\n"
-                .'👤 <b>O\'quvchi:</b> '.e($sender->name)."\n"
-                .'📚 <b>Guruh:</b> '.e((string) $roomLabel)."\n"
-                .'✉️ <b>Xabar:</b> '.e(Str::limit($msg->message, 250));
-
-            $teacherChatId = $course?->teacher?->account?->telegram_chat_id;
-            if ($teacherChatId) {
-                $telegram->sendToChat(
-                    (string) $teacherChatId,
-                    $notifText,
-                    [[['text' => '↩️ Chatga kirib javob yozish', 'url' => $chatUrl]]]
-                );
-            }
-
-            $telegram->send($notifText);
-        }
+        return ChatService::formatMessage($m, $viewer);
     }
 
     public function destroy(Request $request, ChatMessage $chatMessage): JsonResponse|RedirectResponse
@@ -474,7 +348,13 @@ class ChatController extends Controller
             MediaStorage::delete($chatMessage->image_path, 'public');
         }
 
+        $recipientId = $chatMessage->recipient_id;
         $chatMessage->delete();
+
+        $this->chatService->forgetUnreadCache($user->id);
+        if ($recipientId) {
+            $this->chatService->forgetUnreadCache($recipientId);
+        }
 
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);

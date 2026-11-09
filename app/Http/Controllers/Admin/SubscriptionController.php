@@ -78,7 +78,7 @@ class SubscriptionController extends Controller
 
         if ($subscription->user?->telegram_chat_id) {
             $courseUrl = route('courses.show', $subscription->course);
-            $telegram->sendToChat(
+            $telegram->sendToChatAsync(
                 (string) $subscription->user->telegram_chat_id,
                 '🎉 <b>Tabriklaymiz, '.e($subscription->user->name)."!</b>\n\n"
                 .'📚 <b>«'.e($subscription->course->title)."»</b> kursi uchun to'lov chekingiz tasdiqlandi va barcha video darslar ochildi!\n\n"
@@ -118,7 +118,7 @@ class SubscriptionController extends Controller
         }
 
         if ($subscription->user?->telegram_chat_id) {
-            $telegram->sendToChat(
+            $telegram->sendToChatAsync(
                 (string) $subscription->user->telegram_chat_id,
                 "⚠️ <b>To'lov cheki bo'yicha xabar:</b>\n\n"
                 .'📚 Kurs: <b>'.e($subscription->course->title)."</b>\n"

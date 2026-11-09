@@ -41,6 +41,31 @@ class User extends Authenticatable
         'role' => 'student',
     ];
 
+    private static int $subscriptionCacheVersion = 1;
+
+    private int $memoizedVersion = 0;
+
+    private ?bool $memoizedActiveSubscription = null;
+
+    /**
+     * @var array<int, bool>
+     */
+    private array $memoizedCourseAccess = [];
+
+    public static function bumpSubscriptionCacheVersion(): void
+    {
+        self::$subscriptionCacheVersion++;
+    }
+
+    private function syncMemoizedCacheVersion(): void
+    {
+        if ($this->memoizedVersion !== self::$subscriptionCacheVersion) {
+            $this->memoizedVersion = self::$subscriptionCacheVersion;
+            $this->memoizedActiveSubscription = null;
+            $this->memoizedCourseAccess = [];
+        }
+    }
+
     /**
      * Get the attributes that should be cast.
      *
@@ -197,11 +222,23 @@ class User extends Authenticatable
             return true;
         }
 
-        return $this->subscriptions()
+        $this->syncMemoizedCacheVersion();
+
+        if ($course->id !== null && array_key_exists($course->id, $this->memoizedCourseAccess)) {
+            return $this->memoizedCourseAccess[$course->id];
+        }
+
+        $hasAccess = $this->subscriptions()
             ->where('course_id', $course->id)
             ->where('status', 'approved')
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->exists();
+
+        if ($course->id !== null) {
+            $this->memoizedCourseAccess[$course->id] = $hasAccess;
+        }
+
+        return $hasAccess;
     }
 
     /**
@@ -214,7 +251,13 @@ class User extends Authenticatable
             return true;
         }
 
-        return $this->subscriptions()
+        $this->syncMemoizedCacheVersion();
+
+        if ($this->memoizedActiveSubscription !== null) {
+            return $this->memoizedActiveSubscription;
+        }
+
+        return $this->memoizedActiveSubscription = $this->subscriptions()
             ->where('status', 'approved')
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->exists();

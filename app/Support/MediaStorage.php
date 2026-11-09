@@ -13,20 +13,23 @@ use Throwable;
 class MediaStorage
 {
     /**
-     * Yuklangan rasm/faylni ham diskka, ham ma'lumotlar bazasiga (stored_media) zaxiralab saqlaydi.
-     * Bu Render kabi bulutli serverlarda konteyner qayta ishga tushganda ham rasmlar yo'qolmasligini ta'minlaydi.
+     * Yuklangan rasm/faylni diskka va (agar bulutli S3 bo'lmasa) ma'lumotlar bazasiga (stored_media)
+     * siqilgan holda zaxiralab saqlaydi.
      */
     public static function store(UploadedFile $file, string $directory, string $disk = 'public'): string
     {
         $rawContents = @file_get_contents($file->getRealPath());
         $mimeType = $file->getMimeType() ?: ($file->getClientMimeType() ?: 'image/jpeg');
-        $size = (int) $file->getSize();
+
+        if ($rawContents !== false && $rawContents !== '') {
+            $rawContents = self::optimizeImageBinary($rawContents, $mimeType);
+        }
 
         $path = $file->store($directory, $disk);
         $normalizedPath = self::normalizeRelativePath($path);
 
-        if ($rawContents !== false && $rawContents !== '') {
-            self::persistToDatabase($normalizedPath, $disk, $mimeType, $size, $rawContents);
+        if ($rawContents !== false && $rawContents !== '' && self::shouldBackupToDatabase($disk, strlen($rawContents))) {
+            self::persistToDatabase($normalizedPath, $disk, $mimeType, strlen($rawContents), $rawContents);
         }
 
         return $normalizedPath;
@@ -114,12 +117,11 @@ class MediaStorage
             $mime = $storage->mimeType($clean) ?: self::guessMimeType($clean);
 
             // Agar diskda bor bo'lib, bazada hali zaxiralanmagan bo'lsa, avtomatik zaxiraga olamiz
-            self::ensureBackedUp($clean, $disk, $mime, $binary);
+            if (self::shouldBackupToDatabase($disk, strlen($binary))) {
+                self::ensureBackedUp($clean, $disk, $mime, $binary);
+            }
 
-            return response($binary, 200, [
-                'Content-Type' => $mime,
-                'Cache-Control' => 'public, max-age=31536000, immutable',
-            ]);
+            return self::buildHttpResponse($clean, $binary, $mime);
         }
 
         // Diskda topilmasa (masalan Render redeploy/restart bo'lganda), bazadan olib diskka ham qayta yozamiz
@@ -138,10 +140,7 @@ class MediaStorage
 
                         $mime = $record->mime_type ?: self::guessMimeType($clean);
 
-                        return response($binary, 200, [
-                            'Content-Type' => $mime,
-                            'Cache-Control' => 'public, max-age=31536000, immutable',
-                        ]);
+                        return self::buildHttpResponse($clean, $binary, $mime);
                     }
                 }
             }
@@ -149,6 +148,100 @@ class MediaStorage
         }
 
         abort(404);
+    }
+
+    private static function buildHttpResponse(string $path, string $binary, string $mime): Response
+    {
+        $etag = '"'.md5($path.':'.strlen($binary)).'"';
+        $ifNoneMatch = request()->header('If-None-Match');
+
+        if ($ifNoneMatch !== null && trim($ifNoneMatch) === $etag) {
+            return response('', 304, [
+                'ETag' => $etag,
+                'Cache-Control' => 'public, max-age=31536000, immutable',
+            ]);
+        }
+
+        return response($binary, 200, [
+            'Content-Type' => $mime,
+            'ETag' => $etag,
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+        ]);
+    }
+
+    /**
+     * S3 / Cloudflare R2 kabi doimiy bulutli disklarda yoki hajmi haddan tashqari katta fayllarda
+     * SQL bazani shishirmaslik uchun zaxiralash kerak-kerakmasligini aniqlaydi.
+     */
+    private static function shouldBackupToDatabase(string $disk, int $byteSize): bool
+    {
+        if (! config('filesystems.media_db_backup', true)) {
+            return false;
+        }
+
+        $driver = (string) config("filesystems.disks.{$disk}.driver", 'local');
+        if ($driver === 's3') {
+            return false;
+        }
+
+        $maxBytes = (int) config('filesystems.media_db_backup_max_bytes', 5 * 1024 * 1024);
+
+        return $byteSize > 0 && $byteSize <= $maxBytes;
+    }
+
+    /**
+     * Katta hajmli JPEG/WEBP rasmlarni (300 KB dan katta bo'lsa va GD mavjud bo'lsa)
+     * sifatini yo'qotmagan holda (max 1920px, 82% sifat) avtomatik ixchamlashtiradi.
+     */
+    private static function optimizeImageBinary(string $rawContents, string $mimeType): string
+    {
+        if (strlen($rawContents) < 300 * 1024 || ! function_exists('imagecreatefromstring')) {
+            return $rawContents;
+        }
+
+        if (! in_array($mimeType, ['image/jpeg', 'image/jpg', 'image/webp'], true)) {
+            return $rawContents;
+        }
+
+        try {
+            $image = @imagecreatefromstring($rawContents);
+            if ($image === false) {
+                return $rawContents;
+            }
+
+            $width = imagesx($image);
+            $height = imagesy($image);
+            $maxDimension = 1920;
+
+            if ($width > $maxDimension || $height > $maxDimension) {
+                $ratio = min($maxDimension / $width, $maxDimension / $height);
+                $newWidth = max(1, (int) round($width * $ratio));
+                $newHeight = max(1, (int) round($height * $ratio));
+
+                $resized = imagecreatetruecolor($newWidth, $newHeight);
+                if ($resized !== false) {
+                    imagecopyresampled($resized, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+                    imagedestroy($image);
+                    $image = $resized;
+                }
+            }
+
+            ob_start();
+            if ($mimeType === 'image/webp' && function_exists('imagewebp')) {
+                imagewebp($image, null, 82);
+            } else {
+                imagejpeg($image, null, 82);
+            }
+            $compressed = ob_get_clean();
+            imagedestroy($image);
+
+            if (is_string($compressed) && $compressed !== '' && strlen($compressed) < strlen($rawContents)) {
+                return $compressed;
+            }
+        } catch (Throwable) {
+        }
+
+        return $rawContents;
     }
 
     private static function normalizeRelativePath(string $path): string
