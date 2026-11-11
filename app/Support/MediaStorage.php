@@ -121,11 +121,7 @@ class MediaStorage
                 self::ensureBackedUp($clean, $disk, $mime, $binary);
             }
 
-<<<<<<< HEAD
-            return self::buildHttpResponse($clean, $binary, $mime);
-=======
-            return response($binary, 200, self::securityHeaders($mime, $disk));
->>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
+            return self::buildHttpResponse($clean, $binary, $mime, $disk);
         }
 
         // Diskda topilmasa (masalan Render redeploy/restart bo'lganda), bazadan faqat shu diskka tegishli yozuvni olib qayta tiklaymiz
@@ -147,11 +143,7 @@ class MediaStorage
 
                         $mime = $record->mime_type ?: self::guessMimeType($clean);
 
-<<<<<<< HEAD
-                        return self::buildHttpResponse($clean, $binary, $mime);
-=======
-                        return response($binary, 200, self::securityHeaders($mime, $disk));
->>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
+                        return self::buildHttpResponse($clean, $binary, $mime, $disk);
                     }
                 }
             }
@@ -161,24 +153,38 @@ class MediaStorage
         abort(404);
     }
 
-<<<<<<< HEAD
-    private static function buildHttpResponse(string $path, string $binary, string $mime): Response
+    private static function buildHttpResponse(string $path, string $binary, string $mime, string $disk = 'public'): Response
     {
-        $etag = '"'.md5($path.':'.strlen($binary)).'"';
-        $ifNoneMatch = request()->header('If-None-Match');
+        $headers = self::securityHeaders($mime, $disk);
 
-        if ($ifNoneMatch !== null && trim($ifNoneMatch) === $etag) {
-            return response('', 304, [
-                'ETag' => $etag,
-                'Cache-Control' => 'public, max-age=31536000, immutable',
-            ]);
+        if ($disk === 'public') {
+            $etag = '"'.md5($path.':'.strlen($binary)).'"';
+            $headers['ETag'] = $etag;
+            $ifNoneMatch = request()->header('If-None-Match');
+
+            if ($ifNoneMatch !== null && trim($ifNoneMatch) === $etag) {
+                return response('', 304, $headers);
+            }
         }
 
-        return response($binary, 200, [
+        return response($binary, 200, $headers);
+    }
+
+    /**
+     * Yuklangan media fayllar brauzerda ochilganda JavaScript ishga tushmasligi (Stored XSS himoyasi) uchun sarlavhalar.
+     *
+     * @return array<string, string>
+     */
+    private static function securityHeaders(string $mime, string $disk): array
+    {
+        return [
             'Content-Type' => $mime,
-            'ETag' => $etag,
-            'Cache-Control' => 'public, max-age=31536000, immutable',
-        ]);
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+            'Cache-Control' => $disk === 'public'
+                ? 'public, max-age=31536000, immutable'
+                : 'private, no-store, max-age=0',
+        ];
     }
 
     /**
@@ -254,23 +260,6 @@ class MediaStorage
         }
 
         return $rawContents;
-=======
-    /**
-     * Yuklangan media fayllar brauzerda ochilganda JavaScript ishga tushmasligi (Stored XSS himoyasi) uchun sarlavhalar.
-     *
-     * @return array<string, string>
-     */
-    private static function securityHeaders(string $mime, string $disk): array
-    {
-        return [
-            'Content-Type' => $mime,
-            'X-Content-Type-Options' => 'nosniff',
-            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
-            'Cache-Control' => $disk === 'public'
-                ? 'public, max-age=31536000, immutable'
-                : 'private, no-store, max-age=0',
-        ];
->>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
     }
 
     private static function normalizeRelativePath(string $path): string

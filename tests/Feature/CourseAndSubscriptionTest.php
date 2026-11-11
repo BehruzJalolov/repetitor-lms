@@ -24,6 +24,25 @@ class CourseAndSubscriptionTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function fakeImage(string $name, int $width = 10, int $height = 10): UploadedFile
+    {
+        if (function_exists('imagecreatetruecolor')) {
+            return UploadedFile::fake()->image($name, $width, $height);
+        }
+
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+        if ($ext === 'png') {
+            $binary = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+
+            return UploadedFile::fake()->createWithContent($name, $binary ?: 'png');
+        }
+
+        $binary = base64_decode('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=');
+
+        return UploadedFile::fake()->createWithContent($name, $binary ?: 'jpg');
+    }
+
     public function test_teachers_showcase_and_profile_results_page_are_accessible(): void
     {
         $teacher = Teacher::create([
@@ -723,13 +742,13 @@ class CourseAndSubscriptionTest extends TestCase
         ])->assertForbidden();
 
         // Student submits first receipt -> accepted (pending)
-        $receipt1 = UploadedFile::fake()->image('chek1.jpg');
+        $receipt1 = $this->fakeImage('chek1.jpg');
         $this->actingAs($student)->post(route('subscriptions.store', $course), [
             'receipt' => $receipt1,
         ])->assertRedirect(route('courses.show', $course));
 
         // Student submits duplicate receipt while first is pending -> blocked
-        $receipt2 = UploadedFile::fake()->image('chek2.jpg');
+        $receipt2 = $this->fakeImage('chek2.jpg');
         $this->actingAs($student)->post(route('subscriptions.store', $course), [
             'receipt' => $receipt2,
         ])->assertSessionHas('error');
@@ -795,7 +814,7 @@ class CourseAndSubscriptionTest extends TestCase
             'user_id' => $student->id,
             'course_id' => $courseA->id,
             'price' => 250000,
-            'receipt_image' => UploadedFile::fake()->image('a.jpg')->store('receipts', 'local'),
+            'receipt_image' => $this->fakeImage('a.jpg')->store('receipts', 'local'),
             'status' => 'pending',
         ]);
 
@@ -803,7 +822,7 @@ class CourseAndSubscriptionTest extends TestCase
             'user_id' => $student->id,
             'course_id' => $courseB->id,
             'price' => 300000,
-            'receipt_image' => UploadedFile::fake()->image('b.jpg')->store('receipts', 'local'),
+            'receipt_image' => $this->fakeImage('b.jpg')->store('receipts', 'local'),
             'status' => 'pending',
         ]);
 
@@ -1080,12 +1099,12 @@ class CourseAndSubscriptionTest extends TestCase
         $this->actingAs($student)
             ->postJson(route('chat.store'), [
                 'message' => 'Rasm',
-                'image' => UploadedFile::fake()->image('student.jpg'),
+                'image' => $this->fakeImage('student.jpg'),
             ])
             ->assertForbidden();
 
         // 2. Admin/Teacher CAN upload an image and post a promotional link in general chat
-        $adImage = UploadedFile::fake()->image('promo-banner.jpg');
+        $adImage = $this->fakeImage('promo-banner.jpg');
         $this->actingAs($admin)
             ->postJson(route('chat.store'), [
                 'message' => 'Yangi guruhga chegirma! Batafsil: https://t.me/ITblockbehruz',
@@ -1095,7 +1114,7 @@ class CourseAndSubscriptionTest extends TestCase
             ->assertJsonPath('chat_message.links.0.url', 'https://t.me/ITblockbehruz');
 
         // 3. Admin publishes a News / Announcement with "share_to_chat" enabled
-        $newsBanner = UploadedFile::fake()->image('news.jpg');
+        $newsBanner = $this->fakeImage('news.jpg');
         $this->actingAs($admin)
             ->post(route('admin.announcements.store'), [
                 'title' => 'Milliy Sertifikat yangi intensiv oqimi ochildi!',
@@ -1135,7 +1154,7 @@ class CourseAndSubscriptionTest extends TestCase
             'description' => 'Muqova rasmli kurs',
             'price' => 150000,
             'is_active' => '1',
-            'thumbnail' => UploadedFile::fake()->image('course-cover.jpg', 400, 300),
+            'thumbnail' => $this->fakeImage('course-cover.jpg', 400, 300),
         ])->assertRedirect();
 
         $course = Course::where('title', 'Rasm Test Kursi')->firstOrFail();
@@ -1148,7 +1167,7 @@ class CourseAndSubscriptionTest extends TestCase
             'subject' => 'Kimyo',
             'experience_years' => 10,
             'is_active' => '1',
-            'photo' => UploadedFile::fake()->image('teacher-avatar.png', 300, 300),
+            'photo' => $this->fakeImage('teacher-avatar.png', 300, 300),
         ])->assertRedirect();
 
         $teacher = Teacher::where('name', 'Rasm Test Ustoz')->firstOrFail();
@@ -1157,8 +1176,8 @@ class CourseAndSubscriptionTest extends TestCase
         $this->actingAs($admin)->post(route('admin.teachers.results.store', $teacher), [
             'student_name' => 'A\'lochi Talaba',
             'score' => '189.0 ball',
-            'student_photo' => UploadedFile::fake()->image('student.jpg', 200, 200),
-            'certificate_image' => UploadedFile::fake()->image('cert.jpg', 600, 400),
+            'student_photo' => $this->fakeImage('student.jpg', 200, 200),
+            'certificate_image' => $this->fakeImage('cert.jpg', 600, 400),
         ])->assertRedirect();
 
         $result = $teacher->results()->firstOrFail();
@@ -1168,7 +1187,7 @@ class CourseAndSubscriptionTest extends TestCase
         // 3. Announcement banner + Chat image upload
         $chatResponse = $this->actingAs($admin)->postJson(route('chat.store'), [
             'message' => 'Chatdagi rasm testi',
-            'image' => UploadedFile::fake()->image('chat-photo.jpg', 500, 400),
+            'image' => $this->fakeImage('chat-photo.jpg', 500, 400),
         ])->assertOk();
 
         $chatImageUrl = (string) $chatResponse->json('chat_message.image_url');
@@ -1176,7 +1195,7 @@ class CourseAndSubscriptionTest extends TestCase
 
         // 4. Student payment receipt upload
         $this->actingAs($student)->post(route('subscriptions.store', $course), [
-            'receipt' => UploadedFile::fake()->image('receipt.jpg', 400, 600),
+            'receipt' => $this->fakeImage('receipt.jpg', 400, 600),
         ])->assertRedirect();
 
         $subscription = Subscription::where('user_id', $student->id)->where('course_id', $course->id)->firstOrFail();
