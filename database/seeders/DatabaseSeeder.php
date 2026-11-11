@@ -19,19 +19,28 @@ class DatabaseSeeder extends Seeder
         // Admin (repetitor) hisobi. Ma'lumotlar config/admin.php (.env) dan olinadi.
         $phone = Phone::normalize(config('admin.phone')) ?? config('admin.phone');
         $email = config('admin.email');
+        $configuredPassword = trim((string) config('admin.password'));
 
-        $user = User::where('role', 'admin')
-            ->orWhere('phone', $phone)
-            ->when($email, fn ($q) => $q->orWhere('email', $email))
-            ->first() ?? new User;
+        $admin = User::where('role', 'admin')->first();
 
-        $user->forceFill([
-            'name' => config('admin.name'),
-            'phone' => $phone,
-            'email' => $email,
-            'role' => 'admin',
-            'password' => config('admin.password'),
-        ])->save();
+        if (! $admin) {
+            $admin = User::where('phone', $phone)
+                ->when($email, fn ($q) => $q->orWhere('email', $email))
+                ->first() ?? new User;
+
+            $admin->forceFill([
+                'name' => config('admin.name'),
+                'phone' => $phone,
+                'email' => $email,
+                'role' => 'admin',
+                'password' => $configuredPassword !== '' ? $configuredPassword : 'admin12345',
+            ])->save();
+        } elseif ($configuredPassword !== '' && $configuredPassword !== 'admin12345') {
+            // Agar .env da maxsus ADMIN_PASSWORD aniq berilgan bo'lsa, faqat o'shanda yangilaymiz
+            $admin->forceFill([
+                'password' => $configuredPassword,
+            ])->save();
+        }
 
         // Standart Telegram bot va kanal sozlamalarini (agar bazada hali yo'q bo'lsa) yaratamiz
         $defaultSettings = [];

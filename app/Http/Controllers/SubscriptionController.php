@@ -24,7 +24,7 @@ class SubscriptionController extends Controller
         }
 
         $request->validate([
-            'receipt' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
+            'receipt' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,avif,jfif', 'max:10240'],
         ], [
             'receipt.required' => 'Chek rasmini tanlang.',
             'receipt.mimes' => 'Faqat JPG, PNG yoki WEBP formatdagi rasm yuklang.',
@@ -57,8 +57,8 @@ class SubscriptionController extends Controller
         $formattedPrice = number_format($course->price, 0, '', ' ');
         $telegram->sendAsync(
             "🧾 <b>Yangi to'lov cheki yuborildi!</b>\n\n"
-            ."👤 <b>O'quvchi:</b> {$user->name} ({$user->phone})\n"
-            ."📚 <b>Kurs:</b> {$course->title}\n"
+            .'👤 <b>O\'quvchi:</b> '.e($user->name).' ('.e($user->phone).")\n"
+            .'📚 <b>Kurs:</b> '.e($course->title)."\n"
             ."💰 <b>Summa:</b> {$formattedPrice} so'm\n\n"
             .'Admin panelga kirib chekni tasdiqlashingiz mumkin.'
         );

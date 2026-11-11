@@ -57,7 +57,7 @@ class MediaStorage
 
         try {
             if (Schema::hasTable('stored_media')) {
-                DB::table('stored_media')->where('path', $clean)->delete();
+                DB::table('stored_media')->where('path', $clean)->where('disk', $disk)->delete();
             }
         } catch (Throwable) {
         }
@@ -121,13 +121,20 @@ class MediaStorage
                 self::ensureBackedUp($clean, $disk, $mime, $binary);
             }
 
+<<<<<<< HEAD
             return self::buildHttpResponse($clean, $binary, $mime);
+=======
+            return response($binary, 200, self::securityHeaders($mime, $disk));
+>>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
         }
 
-        // Diskda topilmasa (masalan Render redeploy/restart bo'lganda), bazadan olib diskka ham qayta yozamiz
+        // Diskda topilmasa (masalan Render redeploy/restart bo'lganda), bazadan faqat shu diskka tegishli yozuvni olib qayta tiklaymiz
         try {
             if (Schema::hasTable('stored_media')) {
-                $record = DB::table('stored_media')->where('path', $clean)->first();
+                $record = DB::table('stored_media')
+                    ->where('path', $clean)
+                    ->where('disk', $disk)
+                    ->first();
 
                 if ($record && ! empty($record->contents)) {
                     $binary = base64_decode((string) $record->contents, true);
@@ -140,7 +147,11 @@ class MediaStorage
 
                         $mime = $record->mime_type ?: self::guessMimeType($clean);
 
+<<<<<<< HEAD
                         return self::buildHttpResponse($clean, $binary, $mime);
+=======
+                        return response($binary, 200, self::securityHeaders($mime, $disk));
+>>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
                     }
                 }
             }
@@ -150,6 +161,7 @@ class MediaStorage
         abort(404);
     }
 
+<<<<<<< HEAD
     private static function buildHttpResponse(string $path, string $binary, string $mime): Response
     {
         $etag = '"'.md5($path.':'.strlen($binary)).'"';
@@ -242,6 +254,23 @@ class MediaStorage
         }
 
         return $rawContents;
+=======
+    /**
+     * Yuklangan media fayllar brauzerda ochilganda JavaScript ishga tushmasligi (Stored XSS himoyasi) uchun sarlavhalar.
+     *
+     * @return array<string, string>
+     */
+    private static function securityHeaders(string $mime, string $disk): array
+    {
+        return [
+            'Content-Type' => $mime,
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+            'Cache-Control' => $disk === 'public'
+                ? 'public, max-age=31536000, immutable'
+                : 'private, no-store, max-age=0',
+        ];
+>>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
     }
 
     private static function normalizeRelativePath(string $path): string
@@ -302,7 +331,6 @@ class MediaStorage
             'png' => 'image/png',
             'webp' => 'image/webp',
             'gif' => 'image/gif',
-            'svg' => 'image/svg+xml',
             'avif' => 'image/avif',
             'bmp' => 'image/bmp',
             default => 'image/jpeg',

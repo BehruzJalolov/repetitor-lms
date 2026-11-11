@@ -32,10 +32,10 @@ class LeadController extends Controller
         $courseTitle = $lead->course?->title ?? 'Umumiy konsultatsiya';
         $telegram->sendAsync(
             "📞 <b>Yangi murojaat (Bepul konsultatsiya)!</b>\n\n"
-            ."👤 <b>Ism:</b> {$lead->name}\n"
-            ."📱 <b>Telefon:</b> {$lead->phone}\n"
-            ."📚 <b>Yo'nalish:</b> {$courseTitle}"
-            .($lead->message ? "\n💬 <b>Izoh:</b> {$lead->message}" : '')
+            .'👤 <b>Ism:</b> '.e($lead->name)."\n"
+            .'📱 <b>Telefon:</b> '.e($lead->phone)."\n"
+            .'📚 <b>Yo\'nalish:</b> '.e($courseTitle)
+            .($lead->message ? "\n💬 <b>Izoh:</b> ".e($lead->message) : '')
         );
 
         return back()->with('success', 'Murojaatingiz qabul qilindi! Tez orada mutaxassisimiz siz bilan bog\'lanadi.');

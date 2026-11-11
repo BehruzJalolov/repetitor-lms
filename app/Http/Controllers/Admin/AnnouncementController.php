@@ -147,7 +147,7 @@ class AnnouncementController extends Controller
             'category' => ['required', 'string', Rule::in(array_keys(Announcement::CATEGORIES))],
             'excerpt' => ['nullable', 'string', 'max:300'],
             'body' => ['required', 'string', 'max:10000'],
-            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,avif,jfif', 'max:10240'],
             'link_url' => ['nullable', 'url', 'max:255'],
             'link_label' => ['nullable', 'string', 'max:80'],
         ], [

@@ -208,26 +208,12 @@ class RegisterController extends Controller
         ]);
 
         $submittedCode = (string) $request->input('code');
-        $directCodeData = Cache::get('tg_direct_code:'.$submittedCode);
-
-        if (is_array($directCodeData) && ! empty($directCodeData['chat_id'])) {
-            $pending['telegram_chat_id'] = (string) $directCodeData['chat_id'];
-            $pending['channel_verified'] = true;
-            session(['pending_registration' => $pending]);
-        }
-
-        if ($this->isTelegramSubscriptionRequired() && empty($pending['channel_verified'])) {
-            return back()->withErrors([
-                'code' => 'Ro\'yxatdan o\'tishni yakunlash uchun avval Telegram bot va rasmiy kanalga a\'zo bo\'lib, obunani tasdiqlang.',
-            ]);
-        }
-
         $tokenKey = 'reg:'.$pending['email'];
         $record = DB::table('password_reset_tokens')->where('phone', $tokenKey)->first();
-        $matchedViaDirectCode = is_array($directCodeData) && ! empty($directCodeData['chat_id']);
 
-        if (! $matchedViaDirectCode) {
-            if (! $record || Carbon::parse($record->created_at)->addMinutes(self::EXPIRES_MINUTES)->isPast()) {
+        // Urinishni avval atomik tarzda band qilamiz: tg_direct_code ham brute-force dan himoyalanadi
+        if ($record) {
+            if (Carbon::parse($record->created_at)->addMinutes(self::EXPIRES_MINUTES)->isPast()) {
                 DB::table('password_reset_tokens')->where('phone', $tokenKey)->delete();
 
                 return back()->withErrors([
@@ -235,7 +221,6 @@ class RegisterController extends Controller
                 ]);
             }
 
-            // Urinishni atomik tarzda band qilamiz: parallel so'rovlar limitdan oshib keta olmaydi
             $reserved = DB::table('password_reset_tokens')
                 ->where('phone', $tokenKey)
                 ->where('attempts', '<', self::MAX_ATTEMPTS)
@@ -247,6 +232,34 @@ class RegisterController extends Controller
 
                 return redirect()->route('register')
                     ->with('error', 'Ko\'p marta noto\'g\'ri kod kiritildi. Qaytadan ro\'yxatdan o\'ting.');
+            }
+        }
+
+        $directCodeData = Cache::get('tg_direct_code:'.$submittedCode);
+        $directRegToken = is_array($directCodeData) ? (string) ($directCodeData['reg_token'] ?? '') : '';
+        $pendingRegToken = (string) ($pending['telegram_token'] ?? '');
+        $matchedViaDirectCode = is_array($directCodeData)
+            && ! empty($directCodeData['chat_id'])
+            && ($directRegToken === '' || $directRegToken === $pendingRegToken);
+
+        if ($matchedViaDirectCode) {
+            $pending['telegram_chat_id'] = (string) $directCodeData['chat_id'];
+            $pending['channel_verified'] = true;
+            session(['pending_registration' => $pending]);
+            Cache::forget('tg_direct_code:'.$submittedCode);
+        }
+
+        if ($this->isTelegramSubscriptionRequired() && empty($pending['channel_verified'])) {
+            return back()->withErrors([
+                'code' => 'Ro\'yxatdan o\'tishni yakunlash uchun avval Telegram bot va rasmiy kanalga a\'zo bo\'lib, obunani tasdiqlang.',
+            ]);
+        }
+
+        if (! $matchedViaDirectCode) {
+            if (! $record) {
+                return back()->withErrors([
+                    'code' => 'Tasdiqlash kodi muddati o\'tgan. "Qayta yuborish" tugmasini bosing.',
+                ]);
             }
 
             if (! Hash::check($submittedCode, $record->token)) {
@@ -266,8 +279,6 @@ class RegisterController extends Controller
                     'code' => "Tasdiqlash kodi noto'g'ri. Qolgan urinishlar: {$remaining}.",
                 ]);
             }
-        } else {
-            Cache::forget('tg_direct_code:'.$submittedCode);
         }
 
         if (User::where('phone', $pending['phone'])->orWhere('email', $pending['email'])->exists()) {

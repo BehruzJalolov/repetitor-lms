@@ -224,7 +224,7 @@ class ChatController extends Controller
 
         $data = $request->validate([
             'message' => ['nullable', 'string', 'max:1000'],
-            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,avif,jfif', 'max:10240'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,avif,jfif', 'max:10240'],
             'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
             'course_id' => ['nullable', 'integer', 'exists:courses,id'],
             'lesson_id' => ['nullable', 'integer', 'exists:lessons,id'],
@@ -334,7 +334,117 @@ class ChatController extends Controller
      */
     public static function formatMessage(ChatMessage $m, ?User $viewer = null): array
     {
+<<<<<<< HEAD
         return ChatService::formatMessage($m, $viewer);
+=======
+        return [
+            'id' => $m->id,
+            'user_id' => $m->user_id,
+            'is_mine' => $viewer !== null && $m->user_id === $viewer->id,
+            'user_name' => $m->user?->name ?? 'O\'quvchi',
+            'user_initial' => mb_strtoupper(mb_substr($m->user?->name ?? 'O', 0, 1)),
+            'is_admin' => (bool) $m->user?->isAdmin(),
+            'is_banned' => (bool) $m->user?->is_chat_banned,
+            'message' => $m->message,
+            'image_url' => $m->image_url,
+            'links' => $m->user?->isAdmin() ? self::extractLinks((string) $m->message) : [],
+            'is_pinned' => (bool) $m->is_pinned,
+            'parent_id' => $m->parent_id,
+            'parent_user' => $m->parent?->user?->name ?? 'O\'quvchi',
+            'parent_excerpt' => $m->parent ? Str::limit($m->parent->message, 80) : null,
+            'lesson_title' => $m->lesson?->title,
+            'time' => $m->created_at->format('H:i'),
+            'date' => $m->created_at->format('d.m'),
+            'can_delete' => $viewer !== null && ($viewer->hasPermission('moderate_chat') || $m->user_id === $viewer->id),
+            'can_dm' => $viewer !== null && ! $viewer->isAdmin() && $m->user_id !== $viewer->id && ! $m->user?->isAdmin() && $m->recipient_id === null,
+            'dm_url' => $m->user_id ? route('chat.index', ['dm' => $m->user_id]) : null,
+            'pin_url' => route('chat.pin', $m),
+            'ban_url' => $m->user ? route('chat.ban', $m->user) : null,
+            'delete_url' => route('chat.destroy', $m),
+        ];
+    }
+
+    /**
+     * Ustoz/Admin xabari ichidagi URL yoki t.me havolalarni ajratib oladi.
+     *
+     * @return list<array{url: string, label: string}>
+     */
+    private static function extractLinks(string $text): array
+    {
+        if ($text === '') {
+            return [];
+        }
+
+        preg_match_all('~(?:https?://|t\.me/)[^\s<>"\']+~iu', $text, $matches);
+        $links = [];
+
+        foreach (array_unique($matches[0] ?? []) as $raw) {
+            $clean = rtrim($raw, '.,;:!?)');
+            $href = str_starts_with(strtolower($clean), 'http') ? $clean : 'https://'.$clean;
+            $links[] = [
+                'url' => $href,
+                'label' => Str::limit(preg_replace('~^https?://~i', '', $clean) ?? $clean, 40),
+            ];
+        }
+
+        return $links;
+    }
+
+    private function markChatSeen(User $user): void
+    {
+        $latestId = (int) ChatMessage::max('id');
+        Cache::forever('chat_last_seen_id:'.$user->id, $latestId);
+    }
+
+    private function sendChatNotifications(
+        TelegramNotificationService $telegram,
+        ChatMessage $msg,
+        User $sender,
+        ?Course $course,
+        ?Lesson $lesson,
+        ?ChatMessage $parent
+    ): void {
+        $roomLabel = $lesson
+            ? "{$course?->title} — {$lesson->title}"
+            : ($course ? $course->title : 'Umumiy savol-javob');
+
+        $chatUrl = $course
+            ? route('chat.index', ['course' => $course->slug])
+            : route('chat.index');
+
+        // 1. Agar javob yozilgan bo'lsa va javob egasi Telegram ulangan bo'lsa, unga shaxsiy bildirishnoma yuboramiz
+        if ($parent && $parent->user && $parent->user_id !== $sender->id && $parent->user->telegram_chat_id) {
+            $senderName = e($sender->name);
+            $senderTitle = $sender->isAdmin() ? "👨‍🏫 Ustoz ({$senderName})" : "👤 {$senderName}";
+            $telegram->sendToChat(
+                (string) $parent->user->telegram_chat_id,
+                "💬 <b>Sizning xabaringizga javob yozildi!</b>\n\n"
+                ."{$senderTitle}:\n"
+                .'<i>«'.e(Str::limit($msg->message, 200))."»</i>\n\n"
+                .'📚 <b>Guruh:</b> '.e((string) $roomLabel),
+                [[['text' => '💬 Chatni ochish va javob berish', 'url' => $chatUrl]]]
+            );
+        }
+
+        // 2. Agar o'quvchi yozgan bo'lsa, ustozga va adminga Telegram orqali darhol xabar yuboramiz
+        if (! $sender->isAdmin()) {
+            $notifText = "💬 <b>Chatda yangi xabar!</b>\n\n"
+                .'👤 <b>O\'quvchi:</b> '.e($sender->name)."\n"
+                .'📚 <b>Guruh:</b> '.e((string) $roomLabel)."\n"
+                .'✉️ <b>Xabar:</b> '.e(Str::limit($msg->message, 250));
+
+            $teacherChatId = $course?->teacher?->account?->telegram_chat_id;
+            if ($teacherChatId) {
+                $telegram->sendToChat(
+                    (string) $teacherChatId,
+                    $notifText,
+                    [[['text' => '↩️ Chatga kirib javob yozish', 'url' => $chatUrl]]]
+                );
+            }
+
+            $telegram->send($notifText);
+        }
+>>>>>>> f7ed3a582188b92624c0b389a95979cbdcaf64f3
     }
 
     public function destroy(Request $request, ChatMessage $chatMessage): JsonResponse|RedirectResponse
@@ -342,7 +452,10 @@ class ChatController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        abort_unless($user->hasPermission('moderate_chat') || $chatMessage->user_id === $user->id, 403);
+        $canModerate = $user->hasPermission('moderate_chat')
+            && ($user->isSuperAdmin() || (! $chatMessage->user?->isAdmin() && $chatMessage->recipient_id === null));
+
+        abort_unless($canModerate || $chatMessage->user_id === $user->id, 403);
 
         if ($chatMessage->image_path) {
             MediaStorage::delete($chatMessage->image_path, 'public');
