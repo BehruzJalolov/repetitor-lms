@@ -24,10 +24,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         // Har bir veb so'rovda bitta-qurilma qoidasi va xavfsizlik sarlavhalarini tekshiradi
-        $middleware->appendToGroup('web', [
-            EnsureSingleSession::class,
-            SecurityHeaders::class,
-        ]);
+        $middleware->append(SecurityHeaders::class);
+
+            // Har bir veb so'rovda bitta-qurilma qoidasini tekshiradi
+            $middleware->appendToGroup('web', [
+                EnsureSingleSession::class,
+            ]);
+
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->report(function (ThrottleRequestsException $e) {
