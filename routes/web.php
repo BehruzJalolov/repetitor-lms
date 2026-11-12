@@ -95,7 +95,7 @@ Route::middleware('guest')->group(function () {
 Route::post('/chiqish', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
 // Admin va Ustozlar boshqaruv paneli
-Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'admin'])->prefix((string) config('admin.prefix', 'kamsamolls'))->name('admin.')->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::middleware('admin:manage_courses')->group(function () {

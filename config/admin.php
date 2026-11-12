@@ -2,6 +2,11 @@
 
 return [
     /*
+    | Admin panelning maxfiy URL manzili (/admin o'rniga).
+    */
+    'prefix' => trim((string) env('ADMIN_PATH', 'kamsamolls'), '/') ?: 'kamsamolls',
+
+    /*
     | Admin (repetitor) hisobi — `php artisan db:seed` orqali yaratiladi.
     | Qiymatlar .env faylidan olinadi (env() faqat config ichida ishlatiladi,
     | shunda `php artisan optimize` dan keyin ham to'g'ri ishlaydi).
